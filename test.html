@@ -44,7 +44,6 @@
       return {
         lfaToTO: isSummer ? { hours: 4, minutes: 15 } : { hours: 4, minutes: 45 },
         showToTO: isSummer ? { hours: 3, minutes: 15 } : { hours: 3, minutes: 45 },
-        briefToTO: isSummer ? { hours: 2, minutes: 45 } : { hours: 3, minutes: 15 },
         stepToTO: isSingleShip && isSummer ? { hours: 1, minutes: 45 } : { hours: 2, minutes: 0 },
         startToTO: isSummer ? { hours: 0, minutes: 25 } : { hours: 0, minutes: 30 }
       };
@@ -73,7 +72,8 @@
     function calculate(config) {
       const {
         alertType, season, formationType, crewType, timezone,
-        inputTimezone, takeoffTime, landTime, lfaTime
+        inputTimezone, takeoffTime, landTime, lfaTime,
+        briefMinutes = 30, briefReference = 'After Show'
       } = config;
 
       if (alertType === 'LFA' && !lfaTime && !takeoffTime) return null;
@@ -131,8 +131,18 @@
 
       if (toLocal) {
         const showLocal = toLocal.minus(intervals.showToTO);
-        const briefLocal = toLocal.minus(intervals.briefToTO);
         const stepLocal = toLocal.minus(intervals.stepToTO);
+        const showMinToTO = intervals.showToTO.hours * 60 + intervals.showToTO.minutes;
+        const stepMinToTO = intervals.stepToTO.hours * 60 + intervals.stepToTO.minutes;
+        const briefMinToTO = briefReference === 'After Show'
+          ? showMinToTO - briefMinutes
+          : stepMinToTO + briefMinutes;
+        if (briefMinToTO <= stepMinToTO) {
+          warnings.push('Brief falls at or after step — adjust Crew Brief in Setup');
+        } else if (briefMinToTO >= showMinToTO) {
+          warnings.push('Brief falls at or before show — adjust Crew Brief in Setup');
+        }
+        const briefLocal = toLocal.minus({ minutes: briefMinToTO });
         const startLocal = toLocal.minus(intervals.startToTO);
         const checkInLocal = formationType === 'Formation' ? startLocal.minus({ minutes: 5 }) : null;
 
@@ -300,9 +310,10 @@
               assertNotNull(show, 'Show');
               assertClose(show, fmt(to.minus(intervals.showToTO)), 'Show');
 
-              // Brief
+              // Brief — default 30 min After Show
               const brief = findEvent(results, 'Brief');
-              assertClose(brief, fmt(to.minus(intervals.briefToTO)), 'Brief');
+              const _showMin = intervals.showToTO.hours * 60 + intervals.showToTO.minutes;
+              assertClose(brief, fmt(to.minus({ minutes: _showMin - 30 })), 'Brief');
 
               // Step
               const step = findEvent(results, 'Step');
@@ -790,7 +801,6 @@
       const i = getIntervals('Summer', 'Single Ship');
       assertEqual(i.lfaToTO.hours, 4, 'LFA-TO hrs'); assertEqual(i.lfaToTO.minutes, 15, 'LFA-TO min');
       assertEqual(i.showToTO.hours, 3, 'Show-TO hrs'); assertEqual(i.showToTO.minutes, 15, 'Show-TO min');
-      assertEqual(i.briefToTO.hours, 2, 'Brief-TO hrs'); assertEqual(i.briefToTO.minutes, 45, 'Brief-TO min');
       assertEqual(i.stepToTO.hours, 1, 'Step-TO hrs'); assertEqual(i.stepToTO.minutes, 45, 'Step-TO min');
       assertEqual(i.startToTO.hours, 0, 'Start-TO hrs'); assertEqual(i.startToTO.minutes, 25, 'Start-TO min');
     });
@@ -807,7 +817,6 @@
       const i = getIntervals('Winter', 'Single Ship');
       assertEqual(i.lfaToTO.hours, 4, 'LFA-TO hrs'); assertEqual(i.lfaToTO.minutes, 45, 'LFA-TO min');
       assertEqual(i.showToTO.hours, 3, 'Show-TO hrs'); assertEqual(i.showToTO.minutes, 45, 'Show-TO min');
-      assertEqual(i.briefToTO.hours, 3, 'Brief-TO hrs'); assertEqual(i.briefToTO.minutes, 15, 'Brief-TO min');
       assertEqual(i.stepToTO.hours, 2, 'Step-TO hrs'); assertEqual(i.stepToTO.minutes, 0, 'Step-TO min');
       assertEqual(i.startToTO.hours, 0, 'Start-TO hrs'); assertEqual(i.startToTO.minutes, 30, 'Start-TO min');
     });
@@ -948,6 +957,328 @@
       assertEqual(sanitizeTimeInput(''), '', 'Empty');
       assertEqual(sanitizeTimeInput('   '), '', 'Whitespace only');
       assertEqual(sanitizeTimeInput(' 1 2 3 0 '), '1230', 'Spaces stripped');
+    });
+
+    // ============================================================
+    // 13. Brief configuration — computed times
+    //
+    // Show-to-Step window by season/formation:
+    //   Summer Single Ship:  195 - 105 = 90 min
+    //   Summer Formation:    195 - 120 = 75 min
+    //   Winter Single Ship:  225 - 120 = 105 min
+    //   Winter Formation:    225 - 120 = 105 min
+    // ============================================================
+
+    test('[Brief Config] 30 min After Show (default) = old 2+45 before T/O, Summer SS', () => {
+      // showToTO=195, 195-30=165 min before T/O. T/O 1000 → brief 0715
+      const result = calculate({
+        ...BASE, alertType: 'Self Alert', season: 'Summer', formationType: 'Single Ship',
+        crewType: 'Basic Crew', takeoffTime: '1000', lfaTime: '',
+        briefMinutes: 30, briefReference: 'After Show'
+      });
+      assertClose(findEvent(result.results, 'Brief'), '0715', 'Brief');
+      assertNoWarnings(result.warnings, 'No window warning');
+    });
+
+    test('[Brief Config] 30 min After Show (default) = old 3+15 before T/O, Winter SS', () => {
+      // showToTO=225, 225-30=195 min before T/O. T/O 1000 → brief 0645
+      const result = calculate({
+        ...BASE, alertType: 'Self Alert', season: 'Winter', formationType: 'Single Ship',
+        crewType: 'Basic Crew', takeoffTime: '1000', lfaTime: '',
+        briefMinutes: 30, briefReference: 'After Show'
+      });
+      assertClose(findEvent(result.results, 'Brief'), '0645', 'Brief');
+      assertNoWarnings(result.warnings, 'No window warning');
+    });
+
+    test('[Brief Config] 45 min After Show, Summer SS — T/O 1000 → brief 0730', () => {
+      // 195-45=150 min before T/O
+      const result = calculate({
+        ...BASE, alertType: 'Self Alert', season: 'Summer', formationType: 'Single Ship',
+        crewType: 'Basic Crew', takeoffTime: '1000', lfaTime: '',
+        briefMinutes: 45, briefReference: 'After Show'
+      });
+      assertClose(findEvent(result.results, 'Brief'), '0730', 'Brief');
+      assertNoWarnings(result.warnings, 'No window warning');
+    });
+
+    test('[Brief Config] 60 min After Show, Summer SS — T/O 1000 → brief 0745', () => {
+      // 195-60=135 min before T/O
+      const result = calculate({
+        ...BASE, alertType: 'Self Alert', season: 'Summer', formationType: 'Single Ship',
+        crewType: 'Basic Crew', takeoffTime: '1000', lfaTime: '',
+        briefMinutes: 60, briefReference: 'After Show'
+      });
+      assertClose(findEvent(result.results, 'Brief'), '0745', 'Brief');
+      assertNoWarnings(result.warnings, 'No window warning');
+    });
+
+    test('[Brief Config] 45 min After Show, Summer Formation — T/O 1000 → brief 0730', () => {
+      // showToTO=195, 195-45=150 min before T/O
+      const result = calculate({
+        ...BASE, alertType: 'Self Alert', season: 'Summer', formationType: 'Formation',
+        crewType: 'Basic Crew', takeoffTime: '1000', lfaTime: '',
+        briefMinutes: 45, briefReference: 'After Show'
+      });
+      assertClose(findEvent(result.results, 'Brief'), '0730', 'Brief');
+      assertNoWarnings(result.warnings, 'No window warning (window=75, 45<75)');
+    });
+
+    test('[Brief Config] 45 min After Show, Winter SS — T/O 1000 → brief 0700', () => {
+      // showToTO=225, 225-45=180 min before T/O
+      const result = calculate({
+        ...BASE, alertType: 'Self Alert', season: 'Winter', formationType: 'Single Ship',
+        crewType: 'Basic Crew', takeoffTime: '1000', lfaTime: '',
+        briefMinutes: 45, briefReference: 'After Show'
+      });
+      assertClose(findEvent(result.results, 'Brief'), '0700', 'Brief');
+      assertNoWarnings(result.warnings, 'No window warning (window=105, 45<105)');
+    });
+
+    test('[Brief Config] 30 min Before Step, Summer SS — brief 30 min before step', () => {
+      // stepToTO=105, 105+30=135 min before T/O. T/O 1000 → step 0815, brief 0745
+      const result = calculate({
+        ...BASE, alertType: 'Self Alert', season: 'Summer', formationType: 'Single Ship',
+        crewType: 'Basic Crew', takeoffTime: '1000', lfaTime: '',
+        briefMinutes: 30, briefReference: 'Before Step'
+      });
+      const brief = findEvent(result.results, 'Brief');
+      const step = findEvent(result.results, 'Step');
+      assertClose(brief, '0745', 'Brief');
+      assertClose(step, '0815', 'Step');
+      assertEqual(Math.round(step.diff(brief, 'minutes').minutes), 30, 'Brief exactly 30 min before Step');
+      assertNoWarnings(result.warnings, 'No window warning');
+    });
+
+    test('[Brief Config] 60 min Before Step, Summer SS — brief 60 min before step', () => {
+      // stepToTO=105, 105+60=165 min before T/O. T/O 1000 → step 0815, brief 0715
+      const result = calculate({
+        ...BASE, alertType: 'Self Alert', season: 'Summer', formationType: 'Single Ship',
+        crewType: 'Basic Crew', takeoffTime: '1000', lfaTime: '',
+        briefMinutes: 60, briefReference: 'Before Step'
+      });
+      const brief = findEvent(result.results, 'Brief');
+      const step = findEvent(result.results, 'Step');
+      assertClose(brief, '0715', 'Brief');
+      assertEqual(Math.round(step.diff(brief, 'minutes').minutes), 60, 'Brief exactly 60 min before Step');
+      assertNoWarnings(result.warnings, 'No window warning');
+    });
+
+    test('[Brief Config] 30 min Before Step, Winter Formation — brief 30 min before step', () => {
+      // stepToTO=120, 120+30=150 min before T/O. T/O 1000 → step 0800, brief 0730
+      const result = calculate({
+        ...BASE, alertType: 'Self Alert', season: 'Winter', formationType: 'Formation',
+        crewType: 'Basic Crew', takeoffTime: '1000', lfaTime: '',
+        briefMinutes: 30, briefReference: 'Before Step'
+      });
+      const brief = findEvent(result.results, 'Brief');
+      const step = findEvent(result.results, 'Step');
+      assertClose(brief, '0730', 'Brief');
+      assertClose(step, '0800', 'Step');
+      assertEqual(Math.round(step.diff(brief, 'minutes').minutes), 30, 'Brief 30 min before Step');
+      assertNoWarnings(result.warnings, 'No window warning');
+    });
+
+    test('[Brief Config] After Show and Before Step are equivalent at window midpoint (Summer SS)', () => {
+      // Summer SS window = 90 min. At midpoint: After Show 45 min = Before Step 45 min
+      // After Show 45: briefMinToTO = 195-45 = 150
+      // Before Step 45: briefMinToTO = 105+45 = 150
+      const rAfter = calculate({
+        ...BASE, alertType: 'Self Alert', season: 'Summer', formationType: 'Single Ship',
+        crewType: 'Basic Crew', takeoffTime: '1000', lfaTime: '',
+        briefMinutes: 45, briefReference: 'After Show'
+      });
+      const rBefore = calculate({
+        ...BASE, alertType: 'Self Alert', season: 'Summer', formationType: 'Single Ship',
+        crewType: 'Basic Crew', takeoffTime: '1000', lfaTime: '',
+        briefMinutes: 45, briefReference: 'Before Step'
+      });
+      assertEqual(
+        fmt(findEvent(rAfter.results, 'Brief')),
+        fmt(findEvent(rBefore.results, 'Brief')),
+        'Same brief time at midpoint'
+      );
+    });
+
+    test('[Brief Config] Brief always between Show and Step — all 4 combos × both modes × two values', () => {
+      const combos = [
+        { season: 'Summer', formationType: 'Single Ship' },
+        { season: 'Summer', formationType: 'Formation' },
+        { season: 'Winter', formationType: 'Single Ship' },
+        { season: 'Winter', formationType: 'Formation' },
+      ];
+      for (const { season, formationType } of combos) {
+        for (const briefReference of ['After Show', 'Before Step']) {
+          for (const briefMinutes of [15, 30, 60]) {
+            const result = calculate({
+              ...BASE, alertType: 'Self Alert', season, formationType,
+              crewType: 'Basic Crew', takeoffTime: '1200', lfaTime: '',
+              briefMinutes, briefReference
+            });
+            const show = findEvent(result.results, 'Show');
+            const brief = findEvent(result.results, 'Brief');
+            const step = findEvent(result.results, 'Step');
+            const label = `${season} ${formationType} ${briefMinutes}min ${briefReference}`;
+            // Skip window-violation cases (those produce warnings and are tested separately)
+            if (result.warnings.some(w => w.includes('Brief falls'))) continue;
+            assertTrue(brief.toMillis() > show.toMillis(), `Brief after Show — ${label}`);
+            assertTrue(brief.toMillis() < step.toMillis(), `Brief before Step — ${label}`);
+          }
+        }
+      }
+    });
+
+    test('[Brief Config] Brief config applies correctly with LFA alert type', () => {
+      // Should work the same way regardless of alert type
+      const result = calculate({
+        ...BASE, alertType: 'LFA', season: 'Summer', formationType: 'Single Ship',
+        crewType: 'Basic Crew', takeoffTime: '1000', lfaTime: '',
+        briefMinutes: 45, briefReference: 'After Show'
+      });
+      // 195-45=150 min before T/O. T/O 1000 → brief 0730
+      assertClose(findEvent(result.results, 'Brief'), '0730', 'Brief with LFA alert type');
+      assertNoWarnings(result.warnings, 'No window warning');
+    });
+
+    test('[Brief Config] 15 min After Show, Summer SS — minimum value', () => {
+      // 195-15=180 min before T/O. T/O 1000 → brief 0700
+      const result = calculate({
+        ...BASE, alertType: 'Self Alert', season: 'Summer', formationType: 'Single Ship',
+        crewType: 'Basic Crew', takeoffTime: '1000', lfaTime: '',
+        briefMinutes: 15, briefReference: 'After Show'
+      });
+      assertClose(findEvent(result.results, 'Brief'), '0700', 'Brief (15 After Show)');
+      assertNoWarnings(result.warnings, 'No warning');
+    });
+
+    test('[Brief Config] 15 min Before Step, Winter Formation — minimum value', () => {
+      // stepToTO=120, 120+15=135 min before T/O. T/O 1000 → brief 0745
+      const result = calculate({
+        ...BASE, alertType: 'Self Alert', season: 'Winter', formationType: 'Formation',
+        crewType: 'Basic Crew', takeoffTime: '1000', lfaTime: '',
+        briefMinutes: 15, briefReference: 'Before Step'
+      });
+      assertClose(findEvent(result.results, 'Brief'), '0745', 'Brief (15 Before Step)');
+      assertNoWarnings(result.warnings, 'No warning');
+    });
+
+    // ============================================================
+    // 14. Brief configuration — window violation warnings
+    // ============================================================
+
+    test('[Brief Warning] After Show 90 min, Summer SS — brief lands exactly on Step (warn)', () => {
+      // briefMinToTO = 195-90 = 105 = stepMinToTO → at-or-after warning
+      const result = calculate({
+        ...BASE, alertType: 'Self Alert', season: 'Summer', formationType: 'Single Ship',
+        crewType: 'Basic Crew', takeoffTime: '1000', lfaTime: '',
+        briefMinutes: 90, briefReference: 'After Show'
+      });
+      assertWarningContains(result.warnings, 'Brief falls at or after step', 'Warn: brief at Step');
+    });
+
+    test('[Brief Warning] After Show 89 min, Summer SS — just inside window (no warn)', () => {
+      // briefMinToTO = 195-89 = 106 > 105 → valid
+      const result = calculate({
+        ...BASE, alertType: 'Self Alert', season: 'Summer', formationType: 'Single Ship',
+        crewType: 'Basic Crew', takeoffTime: '1000', lfaTime: '',
+        briefMinutes: 89, briefReference: 'After Show'
+      });
+      assertNoWarnings(result.warnings, 'No warn (89 After Show, Summer SS, window=90)');
+    });
+
+    test('[Brief Warning] After Show 75 min, Summer Formation — brief lands exactly on Step (warn)', () => {
+      // briefMinToTO = 195-75 = 120 = stepMinToTO → warn
+      const result = calculate({
+        ...BASE, alertType: 'Self Alert', season: 'Summer', formationType: 'Formation',
+        crewType: 'Basic Crew', takeoffTime: '1000', lfaTime: '',
+        briefMinutes: 75, briefReference: 'After Show'
+      });
+      assertWarningContains(result.warnings, 'Brief falls at or after step', 'Warn (75 After Show, Summer Formation)');
+    });
+
+    test('[Brief Warning] After Show 74 min, Summer Formation — just inside window (no warn)', () => {
+      // briefMinToTO = 195-74 = 121 > 120 → valid
+      const result = calculate({
+        ...BASE, alertType: 'Self Alert', season: 'Summer', formationType: 'Formation',
+        crewType: 'Basic Crew', takeoffTime: '1000', lfaTime: '',
+        briefMinutes: 74, briefReference: 'After Show'
+      });
+      assertNoWarnings(result.warnings, 'No warn (74 After Show, Summer Formation, window=75)');
+    });
+
+    test('[Brief Warning] After Show 90 min, Winter SS — inside larger window (no warn)', () => {
+      // Winter window=105. briefMinToTO = 225-90 = 135 > 120 → valid
+      const result = calculate({
+        ...BASE, alertType: 'Self Alert', season: 'Winter', formationType: 'Single Ship',
+        crewType: 'Basic Crew', takeoffTime: '1000', lfaTime: '',
+        briefMinutes: 90, briefReference: 'After Show'
+      });
+      assertNoWarnings(result.warnings, 'No warn (90 After Show, Winter, window=105)');
+    });
+
+    test('[Brief Warning] After Show 105 min, Winter SS — brief lands exactly on Step (warn)', () => {
+      // briefMinToTO = 225-105 = 120 = stepMinToTO → warn
+      const result = calculate({
+        ...BASE, alertType: 'Self Alert', season: 'Winter', formationType: 'Single Ship',
+        crewType: 'Basic Crew', takeoffTime: '1000', lfaTime: '',
+        briefMinutes: 105, briefReference: 'After Show'
+      });
+      assertWarningContains(result.warnings, 'Brief falls at or after step', 'Warn (105 After Show, Winter SS)');
+    });
+
+    test('[Brief Warning] Before Step 90 min, Summer SS — brief lands exactly on Show (warn)', () => {
+      // briefMinToTO = 105+90 = 195 = showMinToTO → at-or-before-show warning
+      const result = calculate({
+        ...BASE, alertType: 'Self Alert', season: 'Summer', formationType: 'Single Ship',
+        crewType: 'Basic Crew', takeoffTime: '1000', lfaTime: '',
+        briefMinutes: 90, briefReference: 'Before Step'
+      });
+      assertWarningContains(result.warnings, 'Brief falls at or before show', 'Warn: brief at Show');
+    });
+
+    test('[Brief Warning] Before Step 89 min, Summer SS — just inside window (no warn)', () => {
+      // briefMinToTO = 105+89 = 194 < 195 → valid
+      const result = calculate({
+        ...BASE, alertType: 'Self Alert', season: 'Summer', formationType: 'Single Ship',
+        crewType: 'Basic Crew', takeoffTime: '1000', lfaTime: '',
+        briefMinutes: 89, briefReference: 'Before Step'
+      });
+      assertNoWarnings(result.warnings, 'No warn (89 Before Step, Summer SS)');
+    });
+
+    test('[Brief Warning] Before Step 75 min, Summer Formation — brief lands exactly on Show (warn)', () => {
+      // briefMinToTO = 120+75 = 195 = showMinToTO → warn
+      const result = calculate({
+        ...BASE, alertType: 'Self Alert', season: 'Summer', formationType: 'Formation',
+        crewType: 'Basic Crew', takeoffTime: '1000', lfaTime: '',
+        briefMinutes: 75, briefReference: 'Before Step'
+      });
+      assertWarningContains(result.warnings, 'Brief falls at or before show', 'Warn (75 Before Step, Summer Formation)');
+    });
+
+    test('[Brief Warning] Window violation does not break other events', () => {
+      // Even with a bad brief config, Show/Step/T/O must still compute correctly
+      const result = calculate({
+        ...BASE, alertType: 'Self Alert', season: 'Summer', formationType: 'Single Ship',
+        crewType: 'Basic Crew', takeoffTime: '1000', lfaTime: '',
+        briefMinutes: 90, briefReference: 'After Show'
+      });
+      assertWarningContains(result.warnings, 'Brief falls', 'Warning present');
+      assertClose(findEvent(result.results, 'Show'), '0645', 'Show correct despite bad brief');
+      assertClose(findEvent(result.results, 'Step'), '0815', 'Step correct despite bad brief');
+      assertClose(findEvent(result.results, 'T/O'), '1000', 'T/O correct despite bad brief');
+    });
+
+    test('[Brief Warning] Brief window warning coexists with LFA/T/O mismatch warning', () => {
+      // LFA 0500 summer → expected T/O 0915; enter 1100 (mismatch) + 90 After Show (violation)
+      const result = calculate({
+        ...BASE, alertType: 'LFA', season: 'Summer', formationType: 'Single Ship',
+        crewType: 'Basic Crew', lfaTime: '0500', takeoffTime: '1100',
+        briefMinutes: 90, briefReference: 'After Show'
+      });
+      assertTrue(result.warnings.length >= 2, 'Should have at least 2 warnings');
+      assertWarningContains(result.warnings, 'Expected T/O', 'LFA mismatch warning present');
+      assertWarningContains(result.warnings, 'Brief falls', 'Brief window warning present');
     });
 
     // ============================================================
