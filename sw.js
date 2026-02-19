@@ -1,10 +1,10 @@
-const CACHE_NAME = 'showtime-v1.4.0';
+const CACHE_NAME = 'showtime-v1.4.1';
 const ASSETS = [
-  '/',
-  '/index.html',
-  '/manifest.json',
-  '/icon-192.png',
-  '/icon-512.png',
+  './',
+  './index.html',
+  './manifest.json',
+  './android-chrome-192x192.png',
+  './android-chrome-512x512.png',
   'https://unpkg.com/react@18.2.0/umd/react.production.min.js',
   'https://unpkg.com/react-dom@18.2.0/umd/react-dom.production.min.js',
   'https://unpkg.com/htm@3.1.1/dist/htm.umd.js',
