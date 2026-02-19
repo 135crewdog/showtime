@@ -5,11 +5,11 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-  <meta name="apple-mobile-web-app-title" content="Crew Dog">
+  <meta name="apple-mobile-web-app-title" content="Show Time">
   <link rel="manifest" href="manifest.json">
   <link rel="apple-touch-icon" href="icon-192.png">
   <meta name="theme-color" content="#007aff">
-  <title>Crew Dog - Mission Timing Calculator</title>
+  <title>Show Time - Mission Timing Calculator</title>
   <script crossorigin src="https://unpkg.com/react@18.2.0/umd/react.production.min.js"></script>
   <script crossorigin src="https://unpkg.com/react-dom@18.2.0/umd/react-dom.production.min.js"></script>
   <script src="https://unpkg.com/htm@3.1.1/dist/htm.umd.js"></script>
@@ -71,7 +71,7 @@
 
     const sanitizeTimeInput = (val) => val.replace(/\D/g, '').slice(0, 4);
 
-    const CrewDog = () => {
+    const ShowTime = () => {
       const [alertType, setAlertType] = useState('LFA');
       const [season, setSeason] = useState('Summer');
       const [formationType, setFormationType] = useState('Single Ship');
@@ -763,7 +763,7 @@
                   <a href="mailto:feedback@example.com?subject=Crew%20Dog%20Feedback" style=${{display: 'block', textAlign: 'center', padding: '12px 16px', color: colors.accent, fontSize: '17px', fontWeight: '500', textDecoration: 'none'}}>Send Feedback</a>
                 </div>
               </div>
-              <div style=${{textAlign: 'center', marginTop: '32px', paddingBottom: '32px', fontSize: '13px', color: colors.textSecondary}}>Crew Dog v1.4</div>
+              <div style=${{textAlign: 'center', marginTop: '32px', paddingBottom: '32px', fontSize: '13px', color: colors.textSecondary}}>Show Time v1.4</div>
             </div>
           </div>
         `;
@@ -772,7 +772,7 @@
       return html`
         <div style=${styles.container}>
           <div style=${styles.header}>
-            <h1 style=${styles.h1}>Crew Dog</h1>
+            <h1 style=${styles.h1}>Show Time</h1>
             <button onClick=${() => setShowSettings(true)} style=${styles.settingsBtn} aria-label="Settings">\u2699\uFE0F</button>
           </div>
           <div style=${styles.segmentedControl}>
@@ -934,7 +934,7 @@
     };
 
     const root = ReactDOM.createRoot(document.getElementById('root'));
-    root.render(React.createElement(CrewDog));
+    root.render(React.createElement(ShowTime));
 
     // Register service worker for offline support
     if ('serviceWorker' in navigator) {

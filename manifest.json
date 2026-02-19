@@ -1,6 +1,6 @@
 {
-  "name": "Crew Dog - Mission Timing Calculator",
-  "short_name": "Crew Dog",
+  "name": "Show Time - Mission Timing Calculator",
+  "short_name": "Show Time",
   "description": "KC-135 mission timing calculator for aircrew",
   "start_url": "/",
   "display": "standalone",
