@@ -1,0 +1,948 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Show Time">
+  <link rel="manifest" href="manifest.json">
+  <link rel="apple-touch-icon" href="apple-touch-icon.png">
+  <link rel="icon" type="image/png" sizes="32x32" href="favicon-32x32.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="favicon-16x16.png">
+  <link rel="shortcut icon" href="favicon.ico">
+  <meta name="theme-color" content="#007aff">
+  <title>Show Time - Mission Timing Calculator</title>
+  <script crossorigin src="https://unpkg.com/react@18.2.0/umd/react.production.min.js"></script>
+  <script crossorigin src="https://unpkg.com/react-dom@18.2.0/umd/react-dom.production.min.js"></script>
+  <script src="https://unpkg.com/htm@3.1.1/dist/htm.umd.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/luxon@3.4.4/build/global/luxon.min.js"></script>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Helvetica Neue", sans-serif;
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+      overflow: hidden;
+      touch-action: pan-y;
+    }
+
+    #root {
+      height: 100vh;
+      width: 100vw;
+      padding-top: env(safe-area-inset-top);
+      padding-bottom: env(safe-area-inset-bottom);
+      padding-left: env(safe-area-inset-left);
+      padding-right: env(safe-area-inset-right);
+      display: flex;
+      flex-direction: column;
+    }
+
+    button, input:not([type="checkbox"]), select {
+      -webkit-appearance: none;
+      -moz-appearance: none;
+      appearance: none;
+    }
+
+    input[type="checkbox"] {
+      -webkit-appearance: checkbox;
+      appearance: checkbox;
+    }
+
+    button {
+      touch-action: manipulation;
+    }
+
+    input, select {
+      touch-action: manipulation;
+    }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+
+  <script type="module">
+    const { useState, useRef, useEffect, useMemo, useCallback } = React;
+    const { DateTime } = luxon;
+    const html = htm.bind(React.createElement);
+
+    const sanitizeTimeInput = (val) => val.replace(/\D/g, '').slice(0, 4);
+
+    const ShowTime = () => {
+      const [alertType, setAlertType] = useState('LFA');
+      const [season, setSeason] = useState('Summer');
+      const [formationType, setFormationType] = useState('Single Ship');
+      const [crewType, setCrewType] = useState('Basic Crew');
+      const [briefMinutes, setBriefMinutes] = useState(30);
+      const [briefReference, setBriefReference] = useState('After Show');
+      const [timezone, setTimezone] = useState(Intl.DateTimeFormat().resolvedOptions().timeZone);
+      const [inputTimezone, setInputTimezone] = useState('L');
+      const [theme, setTheme] = useState('Auto');
+
+      const [takeoffTime, setTakeoffTime] = useState('');
+      const [landTime, setLandTime] = useState('');
+      const [lfaTime, setLfaTime] = useState('');
+
+      const [showCrewRest, setShowCrewRest] = useState(true);
+      const [showLFA, setShowLFA] = useState(true);
+      const [showCheckIn, setShowCheckIn] = useState(true);
+      const [showShow, setShowShow] = useState(true);
+      const [showBrief, setShowBrief] = useState(true);
+      const [showStep, setShowStep] = useState(true);
+      const [showStart, setShowStart] = useState(true);
+      const [showTakeoff, setShowTakeoff] = useState(true);
+      const [showLand, setShowLand] = useState(true);
+      const [showFDP, setShowFDP] = useState(false);
+
+      const [copySuccess, setCopySuccess] = useState(false);
+      const [currentTab, setCurrentTab] = useState(0);
+      const [showSettings, setShowSettings] = useState(false);
+      const tabRefs = useRef([React.createRef(), React.createRef(), React.createRef()]);
+      const touchStartXRef = useRef(null);
+      const touchStartYRef = useRef(null);
+      const touchEndXRef = useRef(null);
+      const touchEndYRef = useRef(null);
+
+      const [systemTheme, setSystemTheme] = useState('light');
+
+      useEffect(() => {
+        const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
+        setSystemTheme(mediaQuery.matches ? 'dark' : 'light');
+
+        const handler = (e) => setSystemTheme(e.matches ? 'dark' : 'light');
+        mediaQuery.addEventListener('change', handler);
+        return () => mediaQuery.removeEventListener('change', handler);
+      }, []);
+
+      useEffect(() => {
+        if (alertType === 'LFA' && lfaTime && !takeoffTime) {
+          setShowCrewRest(true);
+          setShowLFA(true);
+          setShowCheckIn(false);
+          setShowShow(false);
+          setShowBrief(false);
+          setShowStep(false);
+          setShowStart(false);
+          setShowTakeoff(false);
+          setShowLand(false);
+          setShowFDP(false);
+        } else if (takeoffTime) {
+          setShowCrewRest(true);
+          setShowLFA(alertType === 'LFA');
+          setShowCheckIn(formationType === 'Formation');
+          setShowShow(true);
+          setShowBrief(true);
+          setShowStep(true);
+          setShowStart(true);
+          setShowTakeoff(true);
+          setShowLand(!!landTime);
+          setShowFDP(false);
+        }
+      }, [lfaTime, takeoffTime, landTime, alertType, formationType]);
+
+      const activeTheme = theme === 'Auto' ? systemTheme : theme.toLowerCase();
+
+      useEffect(() => {
+        document.body.style.background = activeTheme === 'dark' ? '#1c1c1e' : '#ffffff';
+        document.body.style.color = activeTheme === 'dark' ? '#ffffff' : '#000000';
+      }, [activeTheme]);
+
+      const colors = useMemo(() => activeTheme === 'dark' ? {
+        bg: '#000000',
+        bgElevated: '#1c1c1e',
+        bgGrouped: '#000000',
+        border: '#38383a',
+        text: '#ffffff',
+        textSecondary: '#98989d',
+        accent: '#007aff',
+        accentText: '#ffffff',
+        destructive: '#ff3b30',
+        success: '#34c759',
+        fill: '#48484a',
+        fillSecondary: '#3a3a3c'
+      } : {
+        bg: '#f2f2f7',
+        bgElevated: '#ffffff',
+        bgGrouped: '#f2f2f7',
+        border: '#c6c6c8',
+        text: '#000000',
+        textSecondary: '#8e8e93',
+        accent: '#007aff',
+        accentText: '#ffffff',
+        destructive: '#ff3b30',
+        success: '#34c759',
+        fill: '#e5e5ea',
+        fillSecondary: '#d1d1d6'
+      }, [activeTheme]);
+
+      const timezones = [
+        'America/New_York', 'America/Chicago', 'America/Denver', 'America/Los_Angeles',
+        'America/Anchorage', 'Pacific/Honolulu', 'UTC', 'Europe/London', 'Europe/Paris',
+        'Europe/Berlin', 'Europe/Rome', 'Europe/Athens', 'Asia/Dubai', 'Asia/Kabul',
+        'Asia/Baghdad', 'Asia/Qatar', 'Asia/Tokyo', 'Asia/Seoul', 'Asia/Singapore',
+        'Australia/Sydney', 'Pacific/Guam'
+      ];
+
+      const minSwipeDistance = 50;
+
+      const changeTab = useCallback((newTab) => {
+        setCurrentTab(newTab);
+        setTimeout(() => {
+          const ref = tabRefs.current[newTab];
+          if (ref && ref.current) {
+            ref.current.scrollTop = 0;
+          }
+        }, 100);
+      }, []);
+
+      const onTouchStart = useCallback((e) => {
+        touchEndXRef.current = null;
+        touchEndYRef.current = null;
+        touchStartXRef.current = e.targetTouches[0].clientX;
+        touchStartYRef.current = e.targetTouches[0].clientY;
+      }, []);
+
+      const onTouchMove = useCallback((e) => {
+        touchEndXRef.current = e.targetTouches[0].clientX;
+        touchEndYRef.current = e.targetTouches[0].clientY;
+      }, []);
+
+      const onTouchEnd = useCallback(() => {
+        if (touchStartXRef.current == null || touchEndXRef.current == null) return;
+        const distX = touchStartXRef.current - touchEndXRef.current;
+        const distY = Math.abs((touchStartYRef.current || 0) - (touchEndYRef.current || 0));
+
+        // Only trigger swipe if horizontal movement dominates vertical
+        if (distY > Math.abs(distX) * 0.75) return;
+
+        const isLeftSwipe = distX > minSwipeDistance;
+        const isRightSwipe = distX < -minSwipeDistance;
+
+        if (isLeftSwipe && currentTab < 2) {
+          changeTab(currentTab + 1);
+        }
+        if (isRightSwipe && currentTab > 0) {
+          changeTab(currentTab - 1);
+        }
+      }, [currentTab, changeTab]);
+
+      const validateTime = useCallback((timeStr) => {
+        if (!timeStr) return null;
+        if (timeStr.length < 4) return 'Enter 4 digits (HHMM)';
+        const hours = parseInt(timeStr.substring(0, 2), 10);
+        const minutes = parseInt(timeStr.substring(2, 4), 10);
+        if (isNaN(hours) || isNaN(minutes) || hours > 23 || minutes > 59) return 'Invalid time (0000\u20132359)';
+        return null;
+      }, []);
+
+      const lfaError = useMemo(() => validateTime(lfaTime), [lfaTime, validateTime]);
+      const takeoffError = useMemo(() => validateTime(takeoffTime), [takeoffTime, validateTime]);
+      const landError = useMemo(() => validateTime(landTime), [landTime, validateTime]);
+
+      const parseTime = useCallback((timeStr, referenceDT = null) => {
+        if (!timeStr || timeStr.length !== 4) return null;
+        const hours = parseInt(timeStr.substring(0, 2), 10);
+        const minutes = parseInt(timeStr.substring(2, 4), 10);
+        if (isNaN(hours) || isNaN(minutes) || hours > 23 || minutes > 59) return null;
+
+        let dt;
+        if (inputTimezone === 'Z') {
+          const utcBase = referenceDT ? referenceDT.toUTC() : DateTime.utc();
+          dt = DateTime.utc(utcBase.year, utcBase.month, utcBase.day, hours, minutes).setZone(timezone);
+        } else {
+          const baseDate = referenceDT || DateTime.now().setZone(timezone);
+          dt = DateTime.fromObject(
+            { year: baseDate.year, month: baseDate.month, day: baseDate.day, hour: hours, minute: minutes },
+            { zone: timezone }
+          );
+        }
+
+        return dt;
+      }, [inputTimezone, timezone]);
+
+      const getIntervals = useCallback(() => {
+        const isSummer = season === 'Summer';
+        const isSingleShip = formationType === 'Single Ship';
+
+        return {
+          lfaToTO: isSummer ? { hours: 4, minutes: 15 } : { hours: 4, minutes: 45 },
+          showToTO: isSummer ? { hours: 3, minutes: 15 } : { hours: 3, minutes: 45 },
+          stepToTO: isSingleShip && isSummer ? { hours: 1, minutes: 45 } : { hours: 2, minutes: 0 },
+          startToTO: isSummer ? { hours: 0, minutes: 25 } : { hours: 0, minutes: 30 }
+        };
+      }, [season, formationType]);
+
+      const computed = useMemo(() => {
+        if (alertType === 'LFA' && !lfaTime && !takeoffTime) return null;
+        if (alertType === 'Self Alert' && !takeoffTime) return null;
+
+        try {
+          const results = [];
+          const warnings = [];
+          const intervals = getIntervals();
+
+          let lfaLocal = null;
+          let toLocal = null;
+
+          if (lfaTime) {
+            lfaLocal = parseTime(lfaTime);
+            if (!lfaLocal) return null;
+          }
+
+          if (takeoffTime) {
+            toLocal = parseTime(takeoffTime);
+            if (!toLocal) return null;
+          }
+
+          if (alertType === 'LFA') {
+            if (lfaLocal && toLocal) {
+              const expectedTO = lfaLocal.plus(intervals.lfaToTO);
+              const diffMinutes = toLocal.diff(expectedTO, 'minutes').minutes;
+              if (Math.abs(diffMinutes) > 1) {
+                const sign = diffMinutes > 0 ? '+' : '';
+                warnings.push('Expected T/O at ' + expectedTO.toFormat('HHmm') + 'L based on LFA; entered T/O differs by ' + sign + Math.round(diffMinutes) + ' min');
+              }
+            } else if (!lfaLocal && toLocal) {
+              lfaLocal = toLocal.minus(intervals.lfaToTO);
+            } else if (lfaLocal && !toLocal) {
+              toLocal = lfaLocal.plus(intervals.lfaToTO);
+            }
+          }
+
+          // Crew rest: 12hr before FDP start
+          // FDP starts at LFA+1hr (alert missions) or show (self-alert)
+          let crewRestLocal;
+          if (alertType === 'LFA' && lfaLocal) {
+            crewRestLocal = lfaLocal.plus({ hours: 1 }).minus({ hours: 12 });
+          } else if (toLocal) {
+            const showLocal = toLocal.minus(intervals.showToTO);
+            crewRestLocal = showLocal.minus({ hours: 12 });
+          }
+
+          if (crewRestLocal) {
+            results.push({ event: 'Crew Rest', local: crewRestLocal, show: showCrewRest });
+          }
+
+          if (alertType === 'LFA' && lfaLocal) {
+            results.push({ event: 'LFA', local: lfaLocal, show: showLFA });
+          }
+
+          if (toLocal) {
+            const showLocal = toLocal.minus(intervals.showToTO);
+            const stepLocal = toLocal.minus(intervals.stepToTO);
+            const startLocal = toLocal.minus(intervals.startToTO);
+            const checkInLocal = formationType === 'Formation' ? startLocal.minus({ minutes: 5 }) : null;
+
+            // Compute brief time from user-configured offset
+            const showMinToTO = intervals.showToTO.hours * 60 + intervals.showToTO.minutes;
+            const stepMinToTO = intervals.stepToTO.hours * 60 + intervals.stepToTO.minutes;
+            const briefMinToTO = briefReference === 'After Show'
+              ? showMinToTO - briefMinutes
+              : stepMinToTO + briefMinutes;
+            if (briefMinToTO <= stepMinToTO) {
+              warnings.push('Brief falls at or after step — adjust Crew Brief in Setup');
+            } else if (briefMinToTO >= showMinToTO) {
+              warnings.push('Brief falls at or before show — adjust Crew Brief in Setup');
+            }
+            const briefLocal = toLocal.minus({ minutes: briefMinToTO });
+
+            if (formationType === 'Formation' && checkInLocal) {
+              results.push({ event: 'Check In', local: checkInLocal, show: showCheckIn });
+            }
+
+            results.push(
+              { event: 'Show', local: showLocal, show: showShow },
+              { event: 'Brief', local: briefLocal, show: showBrief },
+              { event: 'Step', local: stepLocal, show: showStep },
+              { event: 'Start', local: startLocal, show: showStart },
+              { event: 'T/O', local: toLocal, show: showTakeoff }
+            );
+
+            if (landTime) {
+              let landLocal = parseTime(landTime, toLocal);
+              if (landLocal && landLocal < toLocal) {
+                landLocal = landLocal.plus({ days: 1 });
+                warnings.push('Land time interpreted as next day (+1)');
+              }
+              if (landLocal) {
+                results.push({ event: 'Land', local: landLocal, show: showLand });
+              }
+            }
+
+            // FDP: starts 1hr after LFA (alert missions) or at show (self alert)
+            const fdpHours = crewType === 'Basic Crew' ? 16 : 24;
+            let fdpStartLocal;
+            if (alertType === 'LFA' && lfaLocal) {
+              fdpStartLocal = lfaLocal.plus({ hours: 1 });
+            } else {
+              fdpStartLocal = showLocal;
+            }
+            const fdpEndLocal = fdpStartLocal.plus({ hours: fdpHours });
+            results.push({ event: 'FDP End', local: fdpEndLocal, show: showFDP });
+          }
+
+          results.sort((a, b) => a.local.toMillis() - b.local.toMillis());
+
+          return { results, warnings };
+        } catch (err) {
+          console.error('Calculation error:', err);
+          return null;
+        }
+      }, [alertType, season, formationType, crewType, briefMinutes, briefReference, parseTime, getIntervals, takeoffTime, landTime, lfaTime,
+          showCrewRest, showLFA, showCheckIn, showShow, showBrief, showStep, showStart, showTakeoff, showLand, showFDP]);
+
+      const results = computed ? computed.results : null;
+      const warnings = computed ? computed.warnings : [];
+
+      const formatTime = useCallback((dt, referenceDT) => {
+        if (!dt) return '';
+
+        const local = dt.toFormat('HHmm');
+        const zulu = dt.toUTC().toFormat('HHmm');
+
+        let dayIndicator = '';
+        if (referenceDT) {
+          const refDay = referenceDT.startOf('day');
+          const dtDay = dt.startOf('day');
+          const dayDiff = Math.round(dtDay.diff(refDay, 'days').days);
+          if (dayDiff > 0) dayIndicator = ' (+' + dayDiff + ')';
+          if (dayDiff < 0) dayIndicator = ' (' + dayDiff + ')';
+        }
+
+        return local + 'L / ' + zulu + 'Z' + dayIndicator;
+      }, []);
+
+      const referenceDate = useMemo(() => {
+        if (results && results.length > 0) {
+          const toEvent = results.find(r => r.event === 'T/O');
+          if (toEvent) return toEvent.local;
+          const lfaEvent = results.find(r => r.event === 'LFA');
+          if (lfaEvent) return lfaEvent.local;
+        }
+        return null;
+      }, [results]);
+
+      const outputText = useMemo(() => {
+        if (!results) return 'Invalid inputs';
+
+        return results
+          .filter(r => r.show)
+          .map(r => r.event + ' ' + formatTime(r.local, referenceDate))
+          .join('\n');
+      }, [results, referenceDate, formatTime]);
+
+      const copyToClipboard = useCallback(async () => {
+        try {
+          await navigator.clipboard.writeText(outputText);
+          setCopySuccess(true);
+          setTimeout(() => setCopySuccess(false), 2000);
+        } catch (err) {
+          console.error('Clipboard error:', err);
+          alert('Could not copy to clipboard. Please check permissions.');
+        }
+      }, [outputText]);
+
+      const tabs = ['Setup', 'Times', 'Output'];
+      const colorSchemeProp = activeTheme === 'dark' ? 'dark' : 'light';
+
+      const styles = useMemo(() => ({
+        container: {
+          flex: 1,
+          height: '100%',
+          background: colors.bgGrouped,
+          fontFamily: '-apple-system, BlinkMacSystemFont, "SF Pro Display", "Helvetica Neue", sans-serif',
+          display: 'flex',
+          flexDirection: 'column',
+          overflow: 'hidden'
+        },
+        header: {
+          background: colors.bgElevated,
+          borderBottom: '1px solid ' + colors.border,
+          padding: '16px 20px',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between'
+        },
+        h1: {
+          fontSize: '34px',
+          fontWeight: '700',
+          color: colors.text,
+          margin: 0,
+          letterSpacing: '-0.5px'
+        },
+        settingsBtn: {
+          background: colors.fill,
+          border: 'none',
+          borderRadius: '20px',
+          width: '40px',
+          height: '40px',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          cursor: 'pointer',
+          fontSize: '20px',
+          color: colors.text
+        },
+        segmentedControl: {
+          padding: '12px 20px',
+          background: colors.bgElevated,
+          borderBottom: '1px solid ' + colors.border
+        },
+        segmentedControlInner: {
+          background: colors.fill,
+          borderRadius: '9px',
+          padding: '2px',
+          display: 'flex',
+          gap: '2px'
+        },
+        contentContainer: {
+          flex: 1,
+          overflow: 'hidden',
+          position: 'relative'
+        },
+        tabPanel: {
+          minWidth: '100%',
+          height: '100%',
+          overflowY: 'auto',
+          WebkitOverflowScrolling: 'touch',
+          padding: '20px'
+        },
+        section: {
+          marginBottom: '24px'
+        },
+        sectionTitle: {
+          fontSize: '13px',
+          fontWeight: '400',
+          color: colors.textSecondary,
+          marginBottom: '8px',
+          textTransform: 'uppercase',
+          letterSpacing: '0.5px'
+        },
+        sectionContent: {
+          background: colors.bgElevated,
+          borderRadius: '10px',
+          padding: '16px',
+          border: '1px solid ' + colors.border
+        },
+        settingRow: {
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          padding: '8px 0',
+          borderBottom: '1px solid ' + colors.border,
+          marginBottom: '8px',
+          color: colors.text
+        },
+        select: {
+          background: colors.fill,
+          border: 'none',
+          borderRadius: '8px',
+          padding: '6px 12px',
+          color: colors.text,
+          fontSize: '17px',
+          fontFamily: 'inherit',
+          cursor: 'pointer',
+          colorScheme: colorSchemeProp
+        },
+        selectFull: {
+          width: '100%',
+          padding: '12px 16px',
+          background: colors.fill,
+          border: '1px solid ' + colors.border,
+          borderRadius: '10px',
+          color: colors.text,
+          fontSize: '17px',
+          fontFamily: 'inherit',
+          colorScheme: colorSchemeProp
+        },
+        inputGroup: {
+          marginBottom: '16px'
+        },
+        inputLabel: {
+          display: 'block',
+          fontSize: '13px',
+          fontWeight: '400',
+          color: colors.textSecondary,
+          marginBottom: '8px'
+        },
+        input: {
+          width: '100%',
+          padding: '12px 16px',
+          background: colors.fill,
+          border: '1px solid ' + colors.border,
+          borderRadius: '10px',
+          color: colors.text,
+          fontSize: '17px',
+          fontFamily: 'inherit',
+          colorScheme: colorSchemeProp
+        },
+        inputError: {
+          width: '100%',
+          padding: '12px 16px',
+          background: colors.fill,
+          border: '1px solid ' + colors.destructive,
+          borderRadius: '10px',
+          color: colors.text,
+          fontSize: '17px',
+          fontFamily: 'inherit',
+          colorScheme: colorSchemeProp
+        },
+        btn: {
+          width: '100%',
+          padding: '16px',
+          border: 'none',
+          borderRadius: '12px',
+          fontSize: '17px',
+          fontWeight: '600',
+          cursor: 'pointer',
+          fontFamily: 'inherit'
+        },
+        btnPrimary: {
+          background: colors.accent,
+          color: colors.accentText
+        },
+        btnSecondary: {
+          background: colors.fill,
+          color: colors.text
+        },
+        btnSuccess: {
+          background: colors.success,
+          color: colors.accentText
+        },
+        toggleGroup: {
+          display: 'flex',
+          gap: '8px'
+        },
+        outputBox: {
+          background: colors.fill,
+          borderRadius: '10px',
+          padding: '16px',
+          minHeight: '200px',
+          fontFamily: '"SF Mono", Monaco, monospace',
+          fontSize: '14px',
+          lineHeight: '1.8'
+        },
+        outputRow: {
+          display: 'flex',
+          justifyContent: 'space-between',
+          marginBottom: '8px',
+          paddingBottom: '8px',
+          borderBottom: '1px solid ' + colors.fillSecondary
+        },
+        checkboxGrid: {
+          display: 'grid',
+          gridTemplateColumns: '1fr 1fr',
+          gap: '12px'
+        },
+        checkboxLabel: {
+          display: 'flex',
+          alignItems: 'center',
+          gap: '8px',
+          cursor: 'pointer',
+          fontSize: '15px',
+          color: colors.text,
+          padding: '8px',
+          borderRadius: '8px'
+        },
+        checkbox: {
+          width: '20px',
+          height: '20px',
+          cursor: 'pointer',
+          accentColor: colors.accent,
+          colorScheme: colorSchemeProp
+        },
+        errorHint: {
+          fontSize: '13px',
+          color: colors.destructive,
+          marginTop: '4px'
+        },
+        warningBanner: {
+          background: activeTheme === 'dark' ? '#3a2e00' : '#fff3cd',
+          border: '1px solid ' + (activeTheme === 'dark' ? '#665200' : '#ffc107'),
+          borderRadius: '10px',
+          padding: '12px 16px',
+          marginBottom: '16px'
+        },
+        warningText: {
+          fontSize: '13px',
+          color: activeTheme === 'dark' ? '#ffc107' : '#856404',
+          fontWeight: '500'
+        }
+      }), [colors, colorSchemeProp, activeTheme]);
+
+      const segmentBtn = useCallback((active) => ({
+        flex: 1,
+        padding: '8px',
+        background: active ? colors.bgElevated : 'transparent',
+        border: 'none',
+        borderRadius: '7px',
+        color: active ? colors.text : colors.textSecondary,
+        fontSize: '13px',
+        fontWeight: active ? '600' : '400',
+        cursor: 'pointer',
+        transition: 'all 0.2s',
+        fontFamily: 'inherit',
+        boxShadow: active ? '0 1px 3px rgba(0,0,0,0.1)' : 'none'
+      }), [colors]);
+
+      const toggleBtn = useCallback((active) => ({
+        flex: 1,
+        padding: '12px',
+        background: active ? colors.accent : colors.fill,
+        border: 'none',
+        borderRadius: '10px',
+        color: active ? colors.accentText : colors.text,
+        fontSize: '17px',
+        fontWeight: '600',
+        cursor: 'pointer',
+        fontFamily: 'inherit'
+      }), [colors]);
+
+      const tabsWrapperStyle = useMemo(() => ({
+        display: 'flex',
+        transform: 'translateX(-' + (currentTab * 100) + '%)',
+        transition: 'transform 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+        height: '100%'
+      }), [currentTab]);
+
+      const visibleResults = results ? results.filter(r => r.show) : null;
+
+      if (showSettings) {
+        return html`
+          <div style=${styles.container}>
+            <div style=${styles.header}>
+              <button onClick=${() => setShowSettings(false)} style=${{...styles.settingsBtn, background: 'transparent', color: colors.accent, width: 'auto'}}>Done</button>
+              <h1 style=${{...styles.h1, fontSize: '17px', fontWeight: '600', position: 'absolute', left: '50%', transform: 'translateX(-50%)'}}>Settings</h1>
+              <div style=${{ width: '60px' }}></div>
+            </div>
+            <div style=${{...styles.tabPanel, maxHeight: 'calc(100vh - 70px)'}}>
+              <div style=${styles.section}>
+                <div style=${styles.sectionTitle}>APPEARANCE</div>
+                <div style=${styles.sectionContent}>
+                  <div style=${styles.settingRow}>
+                    <span>Theme</span>
+                    <select value=${theme} onChange=${(e) => setTheme(e.target.value)} style=${styles.select}>
+                      <option value="Light">Light</option>
+                      <option value="Dark">Dark</option>
+                      <option value="Auto">Auto</option>
+                    </select>
+                  </div>
+                </div>
+              </div>
+              <div style=${styles.section}>
+                <div style=${styles.sectionTitle}>DISCLAIMER</div>
+                <div style=${styles.sectionContent}>
+                  <div style=${{fontSize: '13px', lineHeight: '1.6', color: colors.textSecondary, padding: '12px 16px', background: colors.fill, borderRadius: '10px'}}>
+                    <p style=${{margin: '0 0 12px 0'}}><strong style=${{color: colors.destructive}}>USE AT YOUR OWN RISK</strong></p>
+                    <p style=${{margin: '0 0 12px 0'}}>This app is an unofficial tool for mission timing calculations. Always verify results against official publications and coordinate with your command and control agency.</p>
+                    <p style=${{margin: 0}}>The developer assumes no liability for operational decisions made using this tool.</p>
+                  </div>
+                </div>
+              </div>
+              <div style=${styles.section}>
+                <div style=${styles.sectionTitle}>REFERENCES</div>
+                <div style=${styles.sectionContent}>
+                  <div style=${{fontSize: '13px', lineHeight: '1.8', color: colors.text, padding: '12px 16px', background: colors.fill, borderRadius: '10px'}}>
+                    <p style=${{margin: '0 0 8px 0', fontWeight: '600'}}>Crew Rest:</p>
+                    <p style=${{margin: '0 0 16px 0', color: colors.textSecondary}}>AFMAN 11-202V3 para 3.1<br/>12 hours before FDP start (LFA+1hr for alert missions, show time for self-alert)</p>
+                    <p style=${{margin: '0 0 8px 0', fontWeight: '600'}}>Flight Duty Period (FDP) Start:</p>
+                    <p style=${{margin: '0 0 16px 0', color: colors.textSecondary}}>AFMAN 11-202V3_AMCSUP para 3.2.1<br/>No later than 1 hour after aircrew alert notification (or at aircrew show time when self-alerting)</p>
+                    <p style=${{margin: '0 0 8px 0', fontWeight: '600'}}>FDP Limits:</p>
+                    <p style=${{margin: '0 0 16px 0', color: colors.textSecondary}}>AFMAN 11-202V3_AMCSUP Table 3.1<br/>Basic Crew: 16 hours<br/>Augmented Crew: 24 hours</p>
+                    <p style=${{margin: '0 0 8px 0', fontWeight: '600'}}>Alert Time (KC-135):</p>
+                    <p style=${{margin: 0, color: colors.textSecondary}}>AFMAN 11-2KC-135V3 para 3.7<br/>4+15 (summer) / 4+45 (winter) hours before scheduled takeoff</p>
+                  </div>
+                </div>
+              </div>
+              <div style=${styles.section}>
+                <div style=${styles.sectionTitle}>FEEDBACK</div>
+                <div style=${styles.sectionContent}>
+                  <a href="mailto:feedback@example.com?subject=Crew%20Dog%20Feedback" style=${{display: 'block', textAlign: 'center', padding: '12px 16px', color: colors.accent, fontSize: '17px', fontWeight: '500', textDecoration: 'none'}}>Send Feedback</a>
+                </div>
+              </div>
+              <div style=${{textAlign: 'center', marginTop: '32px', paddingBottom: '32px', fontSize: '13px', color: colors.textSecondary}}>Show Time v1.4</div>
+            </div>
+          </div>
+        `;
+      }
+
+      return html`
+        <div style=${styles.container}>
+          <div style=${styles.header}>
+            <h1 style=${styles.h1}>Show Time</h1>
+            <button onClick=${() => setShowSettings(true)} style=${styles.settingsBtn} aria-label="Settings">\u2699\uFE0F</button>
+          </div>
+          <div style=${styles.segmentedControl}>
+            <div style=${styles.segmentedControlInner}>
+              ${tabs.map((tab, idx) => html`
+                <button key=${idx} onClick=${() => changeTab(idx)} style=${segmentBtn(currentTab === idx)}>${tab}</button>
+              `)}
+            </div>
+          </div>
+          <div onTouchStart=${onTouchStart} onTouchMove=${onTouchMove} onTouchEnd=${onTouchEnd} style=${styles.contentContainer}>
+            <div style=${tabsWrapperStyle}>
+
+              <div ref=${tabRefs.current[0]} style=${styles.tabPanel}>
+                <div style=${styles.section}>
+                  <div style=${styles.sectionTitle}>CONFIGURATION</div>
+                  <div style=${styles.sectionContent}>
+                    <div style=${styles.settingRow}>
+                      <label htmlFor="alert-type">Alert Type</label>
+                      <select id="alert-type" value=${alertType} onChange=${(e) => setAlertType(e.target.value)} style=${styles.select}>
+                        <option value="LFA">LFA</option>
+                        <option value="Self Alert">Self Alert</option>
+                      </select>
+                    </div>
+                    <div style=${styles.settingRow}>
+                      <label htmlFor="season">Season</label>
+                      <select id="season" value=${season} onChange=${(e) => setSeason(e.target.value)} style=${styles.select}>
+                        <option value="Summer">Summer</option>
+                        <option value="Winter">Winter</option>
+                      </select>
+                    </div>
+                    <div style=${styles.settingRow}>
+                      <label htmlFor="formation">Formation</label>
+                      <select id="formation" value=${formationType} onChange=${(e) => setFormationType(e.target.value)} style=${styles.select}>
+                        <option value="Single Ship">Single Ship</option>
+                        <option value="Formation">Formation</option>
+                      </select>
+                    </div>
+                    <div style=${styles.settingRow}>
+                      <label htmlFor="crew-type">Crew Type</label>
+                      <select id="crew-type" value=${crewType} onChange=${(e) => setCrewType(e.target.value)} style=${styles.select}>
+                        <option value="Basic Crew">Basic Crew</option>
+                        <option value="Augmented Crew">Augmented Crew</option>
+                      </select>
+                    </div>
+                    <div style=${{...styles.settingRow, borderBottom: 'none', marginBottom: 0}}>
+                      <label htmlFor="brief-minutes">Crew Brief</label>
+                      <div style=${{ display: 'flex', gap: '6px', alignItems: 'center' }}>
+                        <select id="brief-minutes" value=${briefMinutes} onChange=${(e) => setBriefMinutes(Number(e.target.value))} style=${styles.select}>
+                          ${[15,20,25,30,35,40,45,50,55,60,65,70,75,80,85,90].map(m => html`<option key=${m} value=${m}>${m} min</option>`)}
+                        </select>
+                        <select value=${briefReference} onChange=${(e) => setBriefReference(e.target.value)} style=${styles.select}>
+                          <option value="After Show">After Show</option>
+                          <option value="Before Step">Before Step</option>
+                        </select>
+                      </div>
+                    </div>
+                    <div style=${{marginTop: '16px'}}>
+                      <label htmlFor="timezone" style=${styles.inputLabel}>TIMEZONE</label>
+                      <select id="timezone" value=${timezone} onChange=${(e) => setTimezone(e.target.value)} style=${styles.selectFull}>
+                        ${timezones.map(tz => html`<option key=${tz} value=${tz}>${tz.replace(/_/g, ' ')}</option>`)}
+                      </select>
+                    </div>
+                  </div>
+                </div>
+                <button onClick=${() => changeTab(1)} style=${{...styles.btn, ...styles.btnPrimary, marginTop: '20px'}}>Continue</button>
+              </div>
+
+              <div ref=${tabRefs.current[1]} style=${styles.tabPanel}>
+                <div style=${styles.section}>
+                  <div style=${styles.sectionTitle}>INPUT TIMEZONE</div>
+                  <div style=${styles.sectionContent}>
+                    <div style=${styles.toggleGroup}>
+                      <button onClick=${() => setInputTimezone('L')} style=${toggleBtn(inputTimezone === 'L')}>Local</button>
+                      <button onClick=${() => setInputTimezone('Z')} style=${toggleBtn(inputTimezone === 'Z')}>Zulu</button>
+                    </div>
+                  </div>
+                </div>
+                <div style=${styles.section}>
+                  <div style=${styles.sectionTitle}>MISSION TIMES</div>
+                  <div style=${styles.sectionContent}>
+                    ${alertType === 'LFA' && html`
+                      <div style=${styles.inputGroup}>
+                        <label htmlFor="input-lfa" style=${styles.inputLabel}>LFA</label>
+                        <input id="input-lfa" type="text" value=${lfaTime} onChange=${(e) => setLfaTime(sanitizeTimeInput(e.target.value))} placeholder=${'HHMM (e.g., 0515)'} maxLength=${4} inputMode="numeric" style=${lfaError ? styles.inputError : styles.input} />
+                        ${lfaError && html`<div style=${styles.errorHint}>${lfaError}</div>`}
+                      </div>
+                    `}
+                    <div style=${styles.inputGroup}>
+                      <label htmlFor="input-takeoff" style=${styles.inputLabel}>Takeoff</label>
+                      <input id="input-takeoff" type="text" value=${takeoffTime} onChange=${(e) => setTakeoffTime(sanitizeTimeInput(e.target.value))} placeholder=${'HHMM (e.g., 0600)'} maxLength=${4} inputMode="numeric" style=${takeoffError ? styles.inputError : styles.input} />
+                      ${takeoffError && html`<div style=${styles.errorHint}>${takeoffError}</div>`}
+                    </div>
+                    <div style=${styles.inputGroup}>
+                      <label htmlFor="input-land" style=${styles.inputLabel}>Land</label>
+                      <input id="input-land" type="text" value=${landTime} onChange=${(e) => setLandTime(sanitizeTimeInput(e.target.value))} placeholder=${'HHMM (e.g., 1125)'} maxLength=${4} inputMode="numeric" style=${landError ? styles.inputError : styles.input} />
+                      ${landError && html`<div style=${styles.errorHint}>${landError}</div>`}
+                    </div>
+                  </div>
+                </div>
+                <div style=${{display: 'flex', gap: '12px'}}>
+                  <button onClick=${() => changeTab(0)} style=${{...styles.btn, ...styles.btnSecondary, flex: 1}}>Back</button>
+                  <button onClick=${() => changeTab(2)} style=${{...styles.btn, ...styles.btnPrimary, flex: 2}}>View Output</button>
+                </div>
+              </div>
+
+              <div ref=${tabRefs.current[2]} style=${styles.tabPanel}>
+                ${warnings.length > 0 && html`
+                  <div style=${styles.warningBanner}>
+                    ${warnings.map((w, i) => html`<div key=${i} style=${styles.warningText}>${w}</div>`)}
+                  </div>
+                `}
+                <div style=${styles.section}>
+                  <div style=${styles.sectionTitle}>CREW TIMING MESSAGE</div>
+                  <div style=${styles.sectionContent}>
+                    <div style=${styles.outputBox}>
+                      ${visibleResults ? visibleResults.map((r, i) => html`
+                        <div key=${i} style=${{...styles.outputRow, borderBottom: i < visibleResults.length - 1 ? '1px solid ' + colors.fillSecondary : 'none'}}>
+                          <span style=${{fontWeight: '600', color: colors.text}}>${r.event}</span>
+                          <span style=${{color: colors.textSecondary}}>${formatTime(r.local, referenceDate)}</span>
+                        </div>
+                      `) : html`
+                        <div style=${{color: colors.textSecondary, fontStyle: 'italic', textAlign: 'center', paddingTop: '40px'}}>
+                          ${alertType === 'LFA' ? 'Enter LFA or Takeoff time' : 'Enter Takeoff time'}
+                        </div>
+                      `}
+                    </div>
+                    <button onClick=${copyToClipboard} disabled=${!results} style=${{...styles.btn, ...(copySuccess ? styles.btnSuccess : styles.btnPrimary), marginTop: '16px', opacity: results ? 1 : 0.5}}>
+                      ${copySuccess ? '\u2713 Copied' : 'Copy to Clipboard'}
+                    </button>
+                  </div>
+                </div>
+                <div style=${styles.section}>
+                  <div style=${styles.sectionTitle}>OUTPUT OPTIONS</div>
+                  <div style=${styles.sectionContent}>
+                    <div style=${styles.checkboxGrid}>
+                      <label style=${styles.checkboxLabel}><input type="checkbox" checked=${showCrewRest} onChange=${(e) => setShowCrewRest(e.target.checked)} style=${styles.checkbox} />Crew Rest</label>
+                      ${alertType === 'LFA' && html`<label style=${styles.checkboxLabel}><input type="checkbox" checked=${showLFA} onChange=${(e) => setShowLFA(e.target.checked)} style=${styles.checkbox} />LFA</label>`}
+                      ${formationType === 'Formation' && html`<label style=${styles.checkboxLabel}><input type="checkbox" checked=${showCheckIn} onChange=${(e) => setShowCheckIn(e.target.checked)} style=${styles.checkbox} />Check In</label>`}
+                      <label style=${styles.checkboxLabel}><input type="checkbox" checked=${showShow} onChange=${(e) => setShowShow(e.target.checked)} style=${styles.checkbox} />Show</label>
+                      <label style=${styles.checkboxLabel}><input type="checkbox" checked=${showBrief} onChange=${(e) => setShowBrief(e.target.checked)} style=${styles.checkbox} />Brief</label>
+                      <label style=${styles.checkboxLabel}><input type="checkbox" checked=${showStep} onChange=${(e) => setShowStep(e.target.checked)} style=${styles.checkbox} />Step</label>
+                      <label style=${styles.checkboxLabel}><input type="checkbox" checked=${showStart} onChange=${(e) => setShowStart(e.target.checked)} style=${styles.checkbox} />Start</label>
+                      <label style=${styles.checkboxLabel}><input type="checkbox" checked=${showTakeoff} onChange=${(e) => setShowTakeoff(e.target.checked)} style=${styles.checkbox} />T/O</label>
+                      <label style=${styles.checkboxLabel}><input type="checkbox" checked=${showLand} onChange=${(e) => setShowLand(e.target.checked)} style=${styles.checkbox} />Land</label>
+                      <label style=${styles.checkboxLabel}><input type="checkbox" checked=${showFDP} onChange=${(e) => setShowFDP(e.target.checked)} style=${styles.checkbox} />FDP End</label>
+                    </div>
+                  </div>
+                </div>
+                <div style=${{display: 'flex', gap: '12px', marginTop: '20px'}}>
+                  <button onClick=${() => changeTab(1)} style=${{...styles.btn, ...styles.btnSecondary, flex: 2}}>Back to Times</button>
+                  <button onClick=${() => { setTakeoffTime(''); setLandTime(''); setLfaTime(''); changeTab(1); }} style=${{...styles.btn, flex: 1, background: 'transparent', border: '1px solid ' + colors.destructive, color: colors.destructive}}>Clear All</button>
+                </div>
+              </div>
+
+            </div>
+          </div>
+        </div>
+      `;
+    };
+
+    const root = ReactDOM.createRoot(document.getElementById('root'));
+    root.render(React.createElement(ShowTime));
+
+    // Register service worker for offline support
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('sw.js').catch(() => {});
+    }
+  </script>
+</body>
+</html>
