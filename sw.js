@@ -1,4 +1,4 @@
-const CACHE_NAME = 'crewdog-v1.3.1';
+const CACHE_NAME = 'crewdog-v1.4.0';
 const ASSETS = [
   '/',
   '/index.html',

@@ -76,6 +76,8 @@
       const [season, setSeason] = useState('Summer');
       const [formationType, setFormationType] = useState('Single Ship');
       const [crewType, setCrewType] = useState('Basic Crew');
+      const [briefMinutes, setBriefMinutes] = useState(30);
+      const [briefReference, setBriefReference] = useState('After Show');
       const [timezone, setTimezone] = useState(Intl.DateTimeFormat().resolvedOptions().timeZone);
       const [inputTimezone, setInputTimezone] = useState('L');
       const [theme, setTheme] = useState('Auto');
@@ -268,7 +270,6 @@
         return {
           lfaToTO: isSummer ? { hours: 4, minutes: 15 } : { hours: 4, minutes: 45 },
           showToTO: isSummer ? { hours: 3, minutes: 15 } : { hours: 3, minutes: 45 },
-          briefToTO: isSummer ? { hours: 2, minutes: 45 } : { hours: 3, minutes: 15 },
           stepToTO: isSingleShip && isSummer ? { hours: 1, minutes: 45 } : { hours: 2, minutes: 0 },
           startToTO: isSummer ? { hours: 0, minutes: 25 } : { hours: 0, minutes: 30 }
         };
@@ -331,10 +332,22 @@
 
           if (toLocal) {
             const showLocal = toLocal.minus(intervals.showToTO);
-            const briefLocal = toLocal.minus(intervals.briefToTO);
             const stepLocal = toLocal.minus(intervals.stepToTO);
             const startLocal = toLocal.minus(intervals.startToTO);
             const checkInLocal = formationType === 'Formation' ? startLocal.minus({ minutes: 5 }) : null;
+
+            // Compute brief time from user-configured offset
+            const showMinToTO = intervals.showToTO.hours * 60 + intervals.showToTO.minutes;
+            const stepMinToTO = intervals.stepToTO.hours * 60 + intervals.stepToTO.minutes;
+            const briefMinToTO = briefReference === 'After Show'
+              ? showMinToTO - briefMinutes
+              : stepMinToTO + briefMinutes;
+            if (briefMinToTO <= stepMinToTO) {
+              warnings.push('Brief falls at or after step — adjust Crew Brief in Setup');
+            } else if (briefMinToTO >= showMinToTO) {
+              warnings.push('Brief falls at or before show — adjust Crew Brief in Setup');
+            }
+            const briefLocal = toLocal.minus({ minutes: briefMinToTO });
 
             if (formationType === 'Formation' && checkInLocal) {
               results.push({ event: 'Check In', local: checkInLocal, show: showCheckIn });
@@ -378,7 +391,7 @@
           console.error('Calculation error:', err);
           return null;
         }
-      }, [alertType, season, formationType, crewType, parseTime, getIntervals, takeoffTime, landTime, lfaTime,
+      }, [alertType, season, formationType, crewType, briefMinutes, briefReference, parseTime, getIntervals, takeoffTime, landTime, lfaTime,
           showCrewRest, showLFA, showCheckIn, showShow, showBrief, showStep, showStart, showTakeoff, showLand, showFDP]);
 
       const results = computed ? computed.results : null;
@@ -750,7 +763,7 @@
                   <a href="mailto:feedback@example.com?subject=Crew%20Dog%20Feedback" style=${{display: 'block', textAlign: 'center', padding: '12px 16px', color: colors.accent, fontSize: '17px', fontWeight: '500', textDecoration: 'none'}}>Send Feedback</a>
                 </div>
               </div>
-              <div style=${{textAlign: 'center', marginTop: '32px', paddingBottom: '32px', fontSize: '13px', color: colors.textSecondary}}>Crew Dog v1.3</div>
+              <div style=${{textAlign: 'center', marginTop: '32px', paddingBottom: '32px', fontSize: '13px', color: colors.textSecondary}}>Crew Dog v1.4</div>
             </div>
           </div>
         `;
@@ -803,6 +816,18 @@
                         <option value="Basic Crew">Basic Crew</option>
                         <option value="Augmented Crew">Augmented Crew</option>
                       </select>
+                    </div>
+                    <div style=${{...styles.settingRow, borderBottom: 'none', marginBottom: 0}}>
+                      <label htmlFor="brief-minutes">Crew Brief</label>
+                      <div style=${{ display: 'flex', gap: '6px', alignItems: 'center' }}>
+                        <select id="brief-minutes" value=${briefMinutes} onChange=${(e) => setBriefMinutes(Number(e.target.value))} style=${styles.select}>
+                          ${[15,20,25,30,35,40,45,50,55,60,65,70,75,80,85,90].map(m => html`<option key=${m} value=${m}>${m} min</option>`)}
+                        </select>
+                        <select value=${briefReference} onChange=${(e) => setBriefReference(e.target.value)} style=${styles.select}>
+                          <option value="After Show">After Show</option>
+                          <option value="Before Step">Before Step</option>
+                        </select>
+                      </div>
                     </div>
                     <div style=${{marginTop: '16px'}}>
                       <label htmlFor="timezone" style=${styles.inputLabel}>TIMEZONE</label>
