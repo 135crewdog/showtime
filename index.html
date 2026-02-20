@@ -364,7 +364,7 @@
               let landLocal = parseTime(landTime, toLocal);
               if (landLocal && landLocal < toLocal) {
                 landLocal = landLocal.plus({ days: 1 });
-                warnings.push('Land time interpreted as next day (+1)');
+                warnings.push('Land time interpreted as Next Day');
               }
               if (landLocal) {
                 results.push({ event: 'Land', local: landLocal, show: showLand });
@@ -407,8 +407,8 @@
           const refDay = referenceDT.startOf('day');
           const dtDay = dt.startOf('day');
           const dayDiff = Math.round(dtDay.diff(refDay, 'days').days);
-          if (dayDiff > 0) dayIndicator = ' (+' + dayDiff + ')';
-          if (dayDiff < 0) dayIndicator = ' (' + dayDiff + ')';
+          if (dayDiff > 0) dayIndicator = ' (Next Day)';
+          if (dayDiff < 0) dayIndicator = ' (Day Prior)';
         }
 
         return local + 'L / ' + zulu + 'Z' + dayIndicator;
@@ -866,7 +866,7 @@
                     </div>
                     <div style=${styles.inputGroup}>
                       <label htmlFor="input-land" style=${styles.inputLabel}>Land</label>
-                      <input id="input-land" type="text" value=${landTime} onChange=${(e) => setLandTime(sanitizeTimeInput(e.target.value))} placeholder=${'HHMM (e.g., 1125)'} maxLength=${4} inputMode="numeric" style=${landError ? styles.inputError : styles.input} />
+                      <input id="input-land" type="text" value=${landTime} onChange=${(e) => setLandTime(sanitizeTimeInput(e.target.value))} placeholder=${'HHMM (e.g., 1200)'} maxLength=${4} inputMode="numeric" style=${landError ? styles.inputError : styles.input} />
                       ${landError && html`<div style=${styles.errorHint}>${landError}</div>`}
                     </div>
                   </div>
