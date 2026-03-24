@@ -457,7 +457,7 @@
           .filter(r => r.show)
           .map(r => `<tr><td style="padding:2px 16px 2px 0;font-weight:600;">${r.event}</td><td style="padding:2px 16px 2px 0;font-family:monospace;">${r.local.toFormat('HHmm')}L</td><td style="padding:2px 0;font-family:monospace;">${r.local.toUTC().toFormat('HHmm')}Z</td></tr>`)
           .join('');
-        return `<table style="border-collapse:collapse;font-family:sans-serif;font-size:14px;">${rows}</table>`;
+        return `<style>@media (prefers-color-scheme:dark){.st-tbl,.st-tbl td{color:#e8e8e8;}}</style><table class="st-tbl" style="border-collapse:collapse;font-family:sans-serif;font-size:14px;color:inherit;">${rows}</table>`;
       }, [results, referenceDate, formatTime]);
 
       const copyToClipboardHtml = useCallback(async () => {
@@ -957,10 +957,10 @@
                     </div>
                     <div style=${{display: 'flex', gap: '8px', marginTop: '16px'}}>
                       <button onClick=${copyToClipboard} disabled=${!results} style=${{...styles.btn, ...(copySuccess ? styles.btnSuccess : styles.btnPrimary), flex: 1, opacity: results ? 1 : 0.5}}>
-                        ${copySuccess ? '\u2713 Copied' : 'Copy Text to Clipboard'}
+                        ${copySuccess ? '\u2713 Copied' : 'Copy Text for Chat'}
                       </button>
                       <button onClick=${copyToClipboardHtml} disabled=${!results} style=${{...styles.btn, ...(copyHtmlSuccess ? styles.btnSuccess : styles.btnSecondary), flex: 1, opacity: results ? 1 : 0.5}}>
-                        ${copyHtmlSuccess ? '\u2713 Copied' : 'Copy HTML Table to Clipboard'}
+                        ${copyHtmlSuccess ? '\u2713 Copied' : 'Copy HTML for Email'}
                       </button>
                     </div>
                   </div>
