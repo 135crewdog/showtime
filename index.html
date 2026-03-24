@@ -70,6 +70,13 @@
 
     const sanitizeTimeInput = (val) => val.replace(/\D/g, '').slice(0, 4);
 
+    const formatDuration = (totalMin) => {
+      const abs = Math.abs(totalMin);
+      const h = Math.floor(abs / 60);
+      const m = abs % 60;
+      return h + '+' + String(m).padStart(2, '0');
+    };
+
     const ShowTime = () => {
       const [alertType, setAlertType] = useState('LFA');
       const [season, setSeason] = useState('Summer');
@@ -97,6 +104,7 @@
       const [showFDP, setShowFDP] = useState(false);
 
       const [copySuccess, setCopySuccess] = useState(false);
+      const [copyHtmlSuccess, setCopyHtmlSuccess] = useState(false);
       const [currentTab, setCurrentTab] = useState(0);
       const [showSettings, setShowSettings] = useState(false);
       const tabRefs = useRef([React.createRef(), React.createRef(), React.createRef()]);
@@ -274,6 +282,14 @@
         };
       }, [season, formationType]);
 
+      const hasDSTTransitionToday = useMemo(() => {
+        try {
+          const start = DateTime.now().setZone(timezone).startOf('day');
+          const end = start.endOf('day');
+          return start.offset !== end.offset;
+        } catch { return false; }
+      }, [timezone]);
+
       const computed = useMemo(() => {
         if (alertType === 'LFA' && !lfaTime && !takeoffTime) return null;
         if (alertType === 'Self Alert' && !takeoffTime) return null;
@@ -300,9 +316,9 @@
             if (lfaLocal && toLocal) {
               const expectedTO = lfaLocal.plus(intervals.lfaToTO);
               const diffMinutes = toLocal.diff(expectedTO, 'minutes').minutes;
-              if (Math.abs(diffMinutes) > 1) {
-                const sign = diffMinutes > 0 ? '+' : '';
-                warnings.push('Expected T/O at ' + expectedTO.toFormat('HHmm') + 'L based on LFA; entered T/O differs by ' + sign + Math.round(diffMinutes) + ' min');
+              if (diffMinutes < -1) {
+                const minRequired = formatDuration(intervals.lfaToTO.hours * 60 + intervals.lfaToTO.minutes);
+                warnings.push('LFA to T/O less than ' + minRequired);
               }
             } else if (!lfaLocal && toLocal) {
               lfaLocal = toLocal.minus(intervals.lfaToTO);
@@ -402,16 +418,7 @@
         const local = dt.toFormat('HHmm');
         const zulu = dt.toUTC().toFormat('HHmm');
 
-        let dayIndicator = '';
-        if (referenceDT) {
-          const refDay = referenceDT.startOf('day');
-          const dtDay = dt.startOf('day');
-          const dayDiff = Math.round(dtDay.diff(refDay, 'days').days);
-          if (dayDiff > 0) dayIndicator = ' (Next Day)';
-          if (dayDiff < 0) dayIndicator = ' (Day Prior)';
-        }
-
-        return local + 'L / ' + zulu + 'Z' + dayIndicator;
+        return local + 'L / ' + zulu + 'Z';
       }, []);
 
       const referenceDate = useMemo(() => {
@@ -443,6 +450,39 @@
           alert('Could not copy to clipboard. Please check permissions.');
         }
       }, [outputText]);
+
+      const outputHtml = useMemo(() => {
+        if (!results) return '';
+        const rows = results
+          .filter(r => r.show)
+          .map(r => `<tr><td style="padding:2px 16px 2px 0;font-weight:600;">${r.event}</td><td style="padding:2px 16px 2px 0;font-family:monospace;">${r.local.toFormat('HHmm')}L</td><td style="padding:2px 0;font-family:monospace;">${r.local.toUTC().toFormat('HHmm')}Z</td></tr>`)
+          .join('');
+        return `<table style="border-collapse:collapse;font-family:sans-serif;font-size:14px;">${rows}</table>`;
+      }, [results, referenceDate, formatTime]);
+
+      const copyToClipboardHtml = useCallback(async () => {
+        if (!outputHtml) return;
+        try {
+          await navigator.clipboard.write([
+            new ClipboardItem({
+              'text/html': new Blob([outputHtml], { type: 'text/html' }),
+              'text/plain': new Blob([outputText], { type: 'text/plain' })
+            })
+          ]);
+          setCopyHtmlSuccess(true);
+          setTimeout(() => setCopyHtmlSuccess(false), 2000);
+        } catch (err) {
+          // Fallback: copy html as plain text
+          try {
+            await navigator.clipboard.writeText(outputHtml);
+            setCopyHtmlSuccess(true);
+            setTimeout(() => setCopyHtmlSuccess(false), 2000);
+          } catch (err2) {
+            console.error('Clipboard error:', err2);
+            alert('Could not copy to clipboard. Please check permissions.');
+          }
+        }
+      }, [outputHtml, outputText]);
 
       const tabs = ['Setup', 'Times', 'Output'];
       const colorSchemeProp = activeTheme === 'dark' ? 'dark' : 'light';
@@ -833,6 +873,7 @@
                       <select id="timezone" value=${timezone} onChange=${(e) => setTimezone(e.target.value)} style=${styles.selectFull}>
                         ${timezones.map(tz => html`<option key=${tz} value=${tz}>${tz.replace(/_/g, ' ')}</option>`)}
                       </select>
+                      ${hasDSTTransitionToday && html`<div style=${{fontSize: '12px', color: activeTheme === 'dark' ? '#ffc107' : '#856404', marginTop: '6px'}}>DST transition today — verify your Season setting.</div>`}
                     </div>
                   </div>
                 </div>
@@ -855,18 +896,18 @@
                     ${alertType === 'LFA' && html`
                       <div style=${styles.inputGroup}>
                         <label htmlFor="input-lfa" style=${styles.inputLabel}>LFA</label>
-                        <input id="input-lfa" type="text" value=${lfaTime} onChange=${(e) => setLfaTime(sanitizeTimeInput(e.target.value))} placeholder=${'HHMM (e.g., 0515)'} maxLength=${4} inputMode="numeric" style=${lfaError ? styles.inputError : styles.input} />
+                        <input id="input-lfa" type="text" value=${lfaTime} onChange=${(e) => setLfaTime(sanitizeTimeInput(e.target.value))} placeholder=${'HHMM'} maxLength=${4} inputMode="numeric" style=${lfaError ? styles.inputError : styles.input} />
                         ${lfaError && html`<div style=${styles.errorHint}>${lfaError}</div>`}
                       </div>
                     `}
                     <div style=${styles.inputGroup}>
                       <label htmlFor="input-takeoff" style=${styles.inputLabel}>Takeoff</label>
-                      <input id="input-takeoff" type="text" value=${takeoffTime} onChange=${(e) => setTakeoffTime(sanitizeTimeInput(e.target.value))} placeholder=${'HHMM (e.g., 0600)'} maxLength=${4} inputMode="numeric" style=${takeoffError ? styles.inputError : styles.input} />
+                      <input id="input-takeoff" type="text" value=${takeoffTime} onChange=${(e) => setTakeoffTime(sanitizeTimeInput(e.target.value))} placeholder=${'HHMM'} maxLength=${4} inputMode="numeric" style=${takeoffError ? styles.inputError : styles.input} />
                       ${takeoffError && html`<div style=${styles.errorHint}>${takeoffError}</div>`}
                     </div>
                     <div style=${styles.inputGroup}>
                       <label htmlFor="input-land" style=${styles.inputLabel}>Land</label>
-                      <input id="input-land" type="text" value=${landTime} onChange=${(e) => setLandTime(sanitizeTimeInput(e.target.value))} placeholder=${'HHMM (e.g., 1200)'} maxLength=${4} inputMode="numeric" style=${landError ? styles.inputError : styles.input} />
+                      <input id="input-land" type="text" value=${landTime} onChange=${(e) => setLandTime(sanitizeTimeInput(e.target.value))} placeholder=${'HHMM'} maxLength=${4} inputMode="numeric" style=${landError ? styles.inputError : styles.input} />
                       ${landError && html`<div style=${styles.errorHint}>${landError}</div>`}
                     </div>
                   </div>
@@ -898,9 +939,14 @@
                         </div>
                       `}
                     </div>
-                    <button onClick=${copyToClipboard} disabled=${!results} style=${{...styles.btn, ...(copySuccess ? styles.btnSuccess : styles.btnPrimary), marginTop: '16px', opacity: results ? 1 : 0.5}}>
-                      ${copySuccess ? '\u2713 Copied' : 'Copy to Clipboard'}
-                    </button>
+                    <div style=${{display: 'flex', gap: '8px', marginTop: '16px'}}>
+                      <button onClick=${copyToClipboard} disabled=${!results} style=${{...styles.btn, ...(copySuccess ? styles.btnSuccess : styles.btnPrimary), flex: 1, opacity: results ? 1 : 0.5}}>
+                        ${copySuccess ? '\u2713 Copied' : 'Copy to Clipboard'}
+                      </button>
+                      <button onClick=${copyToClipboardHtml} disabled=${!results} style=${{...styles.btn, ...(copyHtmlSuccess ? styles.btnSuccess : styles.btnSecondary), flex: 1, opacity: results ? 1 : 0.5}}>
+                        ${copyHtmlSuccess ? '\u2713 Copied' : 'Copy as HTML'}
+                      </button>
+                    </div>
                   </div>
                 </div>
                 <div style=${styles.section}>
@@ -909,10 +955,10 @@
                     <div style=${styles.checkboxGrid}>
                       <label style=${styles.checkboxLabel}><input type="checkbox" checked=${showCrewRest} onChange=${(e) => setShowCrewRest(e.target.checked)} style=${styles.checkbox} />Crew Rest</label>
                       ${alertType === 'LFA' && html`<label style=${styles.checkboxLabel}><input type="checkbox" checked=${showLFA} onChange=${(e) => setShowLFA(e.target.checked)} style=${styles.checkbox} />LFA</label>`}
-                      ${formationType === 'Formation' && html`<label style=${styles.checkboxLabel}><input type="checkbox" checked=${showCheckIn} onChange=${(e) => setShowCheckIn(e.target.checked)} style=${styles.checkbox} />Check In</label>`}
                       <label style=${styles.checkboxLabel}><input type="checkbox" checked=${showShow} onChange=${(e) => setShowShow(e.target.checked)} style=${styles.checkbox} />Show</label>
                       <label style=${styles.checkboxLabel}><input type="checkbox" checked=${showBrief} onChange=${(e) => setShowBrief(e.target.checked)} style=${styles.checkbox} />Brief</label>
                       <label style=${styles.checkboxLabel}><input type="checkbox" checked=${showStep} onChange=${(e) => setShowStep(e.target.checked)} style=${styles.checkbox} />Step</label>
+                      ${formationType === 'Formation' && html`<label style=${styles.checkboxLabel}><input type="checkbox" checked=${showCheckIn} onChange=${(e) => setShowCheckIn(e.target.checked)} style=${styles.checkbox} />Check In</label>`}
                       <label style=${styles.checkboxLabel}><input type="checkbox" checked=${showStart} onChange=${(e) => setShowStart(e.target.checked)} style=${styles.checkbox} />Start</label>
                       <label style=${styles.checkboxLabel}><input type="checkbox" checked=${showTakeoff} onChange=${(e) => setShowTakeoff(e.target.checked)} style=${styles.checkbox} />T/O</label>
                       <label style=${styles.checkboxLabel}><input type="checkbox" checked=${showLand} onChange=${(e) => setShowLand(e.target.checked)} style=${styles.checkbox} />Land</label>
