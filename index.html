@@ -462,27 +462,43 @@
 
       const copyToClipboardHtml = useCallback(async () => {
         if (!outputHtml) return;
-        try {
-          await navigator.clipboard.write([
-            new ClipboardItem({
-              'text/html': new Blob([outputHtml], { type: 'text/html' }),
-              'text/plain': new Blob([outputText], { type: 'text/plain' })
-            })
-          ]);
-          setCopyHtmlSuccess(true);
-          setTimeout(() => setCopyHtmlSuccess(false), 2000);
-        } catch (err) {
-          // Fallback: copy html as plain text
+        // Try modern ClipboardItem API (text/html only, so pasting in rich text gives a table)
+        if (typeof ClipboardItem !== 'undefined') {
           try {
-            await navigator.clipboard.writeText(outputHtml);
+            await navigator.clipboard.write([
+              new ClipboardItem({
+                'text/html': new Blob([outputHtml], { type: 'text/html' }),
+              })
+            ]);
             setCopyHtmlSuccess(true);
             setTimeout(() => setCopyHtmlSuccess(false), 2000);
-          } catch (err2) {
-            console.error('Clipboard error:', err2);
-            alert('Could not copy to clipboard. Please check permissions.');
+            return;
+          } catch (err) {
+            // fall through to execCommand fallback
           }
         }
-      }, [outputHtml, outputText]);
+        // Fallback: inject into a hidden contenteditable and execCommand('copy')
+        try {
+          const el = document.createElement('div');
+          el.setAttribute('contenteditable', 'true');
+          el.style.cssText = 'position:fixed;left:-9999px;top:0;opacity:0;';
+          el.innerHTML = outputHtml;
+          document.body.appendChild(el);
+          const sel = window.getSelection();
+          sel.removeAllRanges();
+          const range = document.createRange();
+          range.selectNodeContents(el);
+          sel.addRange(range);
+          document.execCommand('copy');
+          sel.removeAllRanges();
+          document.body.removeChild(el);
+          setCopyHtmlSuccess(true);
+          setTimeout(() => setCopyHtmlSuccess(false), 2000);
+        } catch (err2) {
+          console.error('Clipboard error:', err2);
+          alert('Could not copy to clipboard. Please check permissions.');
+        }
+      }, [outputHtml]);
 
       const tabs = ['Setup', 'Times', 'Output'];
       const colorSchemeProp = activeTheme === 'dark' ? 'dark' : 'light';
@@ -941,10 +957,10 @@
                     </div>
                     <div style=${{display: 'flex', gap: '8px', marginTop: '16px'}}>
                       <button onClick=${copyToClipboard} disabled=${!results} style=${{...styles.btn, ...(copySuccess ? styles.btnSuccess : styles.btnPrimary), flex: 1, opacity: results ? 1 : 0.5}}>
-                        ${copySuccess ? '\u2713 Copied' : 'Copy to Clipboard'}
+                        ${copySuccess ? '\u2713 Copied' : 'Copy Text to Clipboard'}
                       </button>
                       <button onClick=${copyToClipboardHtml} disabled=${!results} style=${{...styles.btn, ...(copyHtmlSuccess ? styles.btnSuccess : styles.btnSecondary), flex: 1, opacity: results ? 1 : 0.5}}>
-                        ${copyHtmlSuccess ? '\u2713 Copied' : 'Copy as HTML'}
+                        ${copyHtmlSuccess ? '\u2713 Copied' : 'Copy HTML Table to Clipboard'}
                       </button>
                     </div>
                   </div>
