@@ -454,7 +454,7 @@
         if (!results) return '';
         const rows = results
           .filter(r => r.show)
-          .map(r => `<tr><td style="padding:2px 12px 2px 0;font-weight:600;">${r.event}</td><td style="padding:2px 0;font-family:monospace;">${formatTime(r.local, referenceDate)}</td></tr>`)
+          .map(r => `<tr><td style="padding:2px 16px 2px 0;font-weight:600;">${r.event}</td><td style="padding:2px 16px 2px 0;font-family:monospace;">${r.local.toFormat('HHmm')}L</td><td style="padding:2px 0;font-family:monospace;">${r.local.toUTC().toFormat('HHmm')}Z</td></tr>`)
           .join('');
         return `<table style="border-collapse:collapse;font-family:sans-serif;font-size:14px;">${rows}</table>`;
       }, [results, referenceDate, formatTime]);
