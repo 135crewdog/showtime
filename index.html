@@ -957,10 +957,10 @@
                     </div>
                     <div style=${{display: 'flex', gap: '8px', marginTop: '16px'}}>
                       <button onClick=${copyToClipboard} disabled=${!results} style=${{...styles.btn, ...(copySuccess ? styles.btnSuccess : styles.btnPrimary), flex: 1, opacity: results ? 1 : 0.5}}>
-                        ${copySuccess ? '\u2713 Copied' : 'Copy Text to Clipboard'}
+                        ${copySuccess ? '\u2713 Copied' : 'Copy Text for Chat'}
                       </button>
                       <button onClick=${copyToClipboardHtml} disabled=${!results} style=${{...styles.btn, ...(copyHtmlSuccess ? styles.btnSuccess : styles.btnSecondary), flex: 1, opacity: results ? 1 : 0.5}}>
-                        ${copyHtmlSuccess ? '\u2713 Copied' : 'Copy HTML Table to Clipboard'}
+                        ${copyHtmlSuccess ? '\u2713 Copied' : 'Copy HTML for Email'}
                       </button>
                     </div>
                   </div>
