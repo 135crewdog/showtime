@@ -316,9 +316,8 @@
             if (lfaLocal && toLocal) {
               const expectedTO = lfaLocal.plus(intervals.lfaToTO);
               const diffMinutes = toLocal.diff(expectedTO, 'minutes').minutes;
-              if (Math.abs(diffMinutes) > 1) {
-                const direction = diffMinutes > 0 ? 'late' : 'early';
-                warnings.push('Expected T/O at ' + expectedTO.toFormat('HHmm') + 'L based on LFA; entered T/O is ' + formatDuration(Math.round(diffMinutes)) + ' ' + direction);
+              if (diffMinutes < -1) {
+                warnings.push('T/O ' + formatDuration(Math.round(-diffMinutes)) + ' before LFA minimum (' + expectedTO.toFormat('HHmm') + 'L)');
               }
             } else if (!lfaLocal && toLocal) {
               lfaLocal = toLocal.minus(intervals.lfaToTO);
