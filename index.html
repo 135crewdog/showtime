@@ -317,7 +317,8 @@
               const expectedTO = lfaLocal.plus(intervals.lfaToTO);
               const diffMinutes = toLocal.diff(expectedTO, 'minutes').minutes;
               if (diffMinutes < -1) {
-                warnings.push('LFA to T/O is ' + formatDuration(Math.round(-diffMinutes)) + ' short');
+                const minRequired = formatDuration(intervals.lfaToTO.hours * 60 + intervals.lfaToTO.minutes);
+                warnings.push('LFA to T/O less than ' + minRequired);
               }
             } else if (!lfaLocal && toLocal) {
               lfaLocal = toLocal.minus(intervals.lfaToTO);
