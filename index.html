@@ -457,7 +457,7 @@
           .filter(r => r.show)
           .map(r => `<tr><td style="padding:2px 16px 2px 0;font-weight:600;">${r.event}</td><td style="padding:2px 16px 2px 0;font-family:monospace;">${r.local.toFormat('HHmm')}L</td><td style="padding:2px 0;font-family:monospace;">${r.local.toUTC().toFormat('HHmm')}Z</td></tr>`)
           .join('');
-        return `<table style="border-collapse:collapse;font-family:sans-serif;font-size:14px;">${rows}</table>`;
+        return `<style>@media (prefers-color-scheme:dark){.st-tbl,.st-tbl td{color:#e8e8e8;}}</style><table class="st-tbl" style="border-collapse:collapse;font-family:sans-serif;font-size:14px;color:inherit;">${rows}</table>`;
       }, [results, referenceDate, formatTime]);
 
       const copyToClipboardHtml = useCallback(async () => {
