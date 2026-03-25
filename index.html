@@ -94,6 +94,7 @@
 
       const [showCrewRest, setShowCrewRest] = useState(true);
       const [showLFA, setShowLFA] = useState(true);
+      const [showAlert, setShowAlert] = useState(true);
       const [showCheckIn, setShowCheckIn] = useState(true);
       const [showShow, setShowShow] = useState(true);
       const [showBrief, setShowBrief] = useState(true);
@@ -128,17 +129,19 @@
         if (alertType === 'LFA' && lfaTime && !takeoffTime) {
           setShowCrewRest(true);
           setShowLFA(true);
+          setShowAlert(true);
           setShowCheckIn(false);
-          setShowShow(false);
-          setShowBrief(false);
-          setShowStep(false);
-          setShowStart(false);
-          setShowTakeoff(false);
+          setShowShow(true);
+          setShowBrief(true);
+          setShowStep(true);
+          setShowStart(true);
+          setShowTakeoff(true);
           setShowLand(false);
           setShowFDP(false);
         } else if (takeoffTime) {
           setShowCrewRest(true);
           setShowLFA(alertType === 'LFA');
+          setShowAlert(alertType === 'LFA');
           setShowCheckIn(formationType === 'Formation');
           setShowShow(true);
           setShowBrief(true);
@@ -312,26 +315,39 @@
             if (!toLocal) return null;
           }
 
+          let alertLocal = null;
+
           if (alertType === 'LFA') {
             if (lfaLocal && toLocal) {
-              const expectedTO = lfaLocal.plus(intervals.lfaToTO);
-              const diffMinutes = toLocal.diff(expectedTO, 'minutes').minutes;
-              if (diffMinutes < -1) {
+              // Case C: both LFA and T/O provided — calculate Alert as T/O minus required interval
+              const calculatedAlert = toLocal.minus(intervals.lfaToTO);
+              alertLocal = calculatedAlert;
+              if (calculatedAlert < lfaLocal) {
                 const minRequired = formatDuration(intervals.lfaToTO.hours * 60 + intervals.lfaToTO.minutes);
-                warnings.push('LFA to T/O less than ' + minRequired);
+                warnings.push('Alert to T/O less than ' + minRequired);
               }
             } else if (!lfaLocal && toLocal) {
+              // Case B: T/O only — LFA = Alert = T/O minus required interval
               lfaLocal = toLocal.minus(intervals.lfaToTO);
+              alertLocal = lfaLocal;
             } else if (lfaLocal && !toLocal) {
+              // Case A: LFA only — Alert = LFA, T/O = LFA plus required interval
               toLocal = lfaLocal.plus(intervals.lfaToTO);
+              alertLocal = lfaLocal;
             }
           }
 
+          // Effective alert time: crew cannot be alerted before LFA.
+          // In Case C tight (calculatedAlert < LFA), the crew is alerted at LFA.
+          const effectiveAlertLocal = (alertLocal && lfaLocal && alertLocal < lfaLocal)
+            ? lfaLocal
+            : alertLocal;
+
           // Crew rest: 12hr before FDP start
-          // FDP starts at LFA+1hr (alert missions) or show (self-alert)
+          // FDP starts at alert+1hr (LFA missions) or show (self-alert)
           let crewRestLocal;
-          if (alertType === 'LFA' && lfaLocal) {
-            crewRestLocal = lfaLocal.plus({ hours: 1 }).minus({ hours: 12 });
+          if (alertType === 'LFA' && effectiveAlertLocal) {
+            crewRestLocal = effectiveAlertLocal.plus({ hours: 1 }).minus({ hours: 12 });
           } else if (toLocal) {
             const showLocal = toLocal.minus(intervals.showToTO);
             crewRestLocal = showLocal.minus({ hours: 12 });
@@ -343,6 +359,10 @@
 
           if (alertType === 'LFA' && lfaLocal) {
             results.push({ event: 'LFA', local: lfaLocal, show: showLFA });
+          }
+
+          if (alertType === 'LFA' && alertLocal) {
+            results.push({ event: 'Alert', local: alertLocal, show: showAlert });
           }
 
           if (toLocal) {
@@ -387,11 +407,11 @@
               }
             }
 
-            // FDP: starts 1hr after LFA (alert missions) or at show (self alert)
+            // FDP: starts 1hr after alert notification (LFA missions) or at show (self-alert)
             const fdpHours = crewType === 'Basic Crew' ? 16 : 24;
             let fdpStartLocal;
-            if (alertType === 'LFA' && lfaLocal) {
-              fdpStartLocal = lfaLocal.plus({ hours: 1 });
+            if (alertType === 'LFA' && effectiveAlertLocal) {
+              fdpStartLocal = effectiveAlertLocal.plus({ hours: 1 });
             } else {
               fdpStartLocal = showLocal;
             }
@@ -407,7 +427,7 @@
           return null;
         }
       }, [alertType, season, formationType, crewType, briefMinutes, briefReference, parseTime, getIntervals, takeoffTime, landTime, lfaTime,
-          showCrewRest, showLFA, showCheckIn, showShow, showBrief, showStep, showStart, showTakeoff, showLand, showFDP]);
+          showCrewRest, showLFA, showAlert, showCheckIn, showShow, showBrief, showStep, showStart, showTakeoff, showLand, showFDP]);
 
       const results = computed ? computed.results : null;
       const warnings = computed ? computed.warnings : [];
@@ -971,6 +991,7 @@
                     <div style=${styles.checkboxGrid}>
                       <label style=${styles.checkboxLabel}><input type="checkbox" checked=${showCrewRest} onChange=${(e) => setShowCrewRest(e.target.checked)} style=${styles.checkbox} />Crew Rest</label>
                       ${alertType === 'LFA' && html`<label style=${styles.checkboxLabel}><input type="checkbox" checked=${showLFA} onChange=${(e) => setShowLFA(e.target.checked)} style=${styles.checkbox} />LFA</label>`}
+                      ${alertType === 'LFA' && html`<label style=${styles.checkboxLabel}><input type="checkbox" checked=${showAlert} onChange=${(e) => setShowAlert(e.target.checked)} style=${styles.checkbox} />Alert</label>`}
                       <label style=${styles.checkboxLabel}><input type="checkbox" checked=${showShow} onChange=${(e) => setShowShow(e.target.checked)} style=${styles.checkbox} />Show</label>
                       <label style=${styles.checkboxLabel}><input type="checkbox" checked=${showBrief} onChange=${(e) => setShowBrief(e.target.checked)} style=${styles.checkbox} />Brief</label>
                       <label style=${styles.checkboxLabel}><input type="checkbox" checked=${showStep} onChange=${(e) => setShowStep(e.target.checked)} style=${styles.checkbox} />Step</label>
