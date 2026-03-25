@@ -224,7 +224,7 @@
       const onTouchEnd = useCallback(() => {
         if (touchStartXRef.current == null || touchEndXRef.current == null) return;
         const distX = touchStartXRef.current - touchEndXRef.current;
-        const distY = Math.abs((touchStartYRef.current || 0) - (touchEndYRef.current || 0));
+        const distY = Math.abs((touchStartYRef.current ?? 0) - (touchEndYRef.current ?? 0));
 
         // Only trigger swipe if horizontal movement dominates vertical
         if (distY > Math.abs(distX) * 0.75) return;
@@ -442,7 +442,7 @@
       const results = computed ? computed.results : null;
       const warnings = computed ? computed.warnings : [];
 
-      const formatTime = useCallback((dt, referenceDT) => {
+      const formatTime = useCallback((dt) => {
         if (!dt) return '';
 
         const local = dt.toFormat('HHmm');
@@ -451,24 +451,14 @@
         return local + 'L / ' + zulu + 'Z';
       }, []);
 
-      const referenceDate = useMemo(() => {
-        if (results && results.length > 0) {
-          const toEvent = results.find(r => r.event === 'T/O');
-          if (toEvent) return toEvent.local;
-          const lfaEvent = results.find(r => r.event === 'LFA');
-          if (lfaEvent) return lfaEvent.local;
-        }
-        return null;
-      }, [results]);
-
       const outputText = useMemo(() => {
         if (!results) return 'Invalid inputs';
 
         return results
           .filter(r => r.show)
-          .map(r => r.event + ' ' + formatTime(r.local, referenceDate))
+          .map(r => r.event + ' ' + formatTime(r.local))
           .join('\n');
-      }, [results, referenceDate, formatTime]);
+      }, [results, formatTime]);
 
       const copyToClipboard = useCallback(async () => {
         try {
@@ -488,7 +478,7 @@
           .map(r => `<tr><td style="padding:2px 16px 2px 0;font-weight:600;">${r.event}</td><td style="padding:2px 16px 2px 0;font-family:monospace;">${r.local.toFormat('HHmm')}L</td><td style="padding:2px 0;font-family:monospace;">${r.local.toUTC().toFormat('HHmm')}Z</td></tr>`)
           .join('');
         return `<style>@media (prefers-color-scheme:dark){.st-tbl,.st-tbl td{color:#e8e8e8;}}</style><table class="st-tbl" style="border-collapse:collapse;font-family:sans-serif;font-size:14px;color:inherit;">${rows}</table>`;
-      }, [results, referenceDate, formatTime]);
+      }, [results]);
 
       const copyToClipboardHtml = useCallback(async () => {
         if (!outputHtml) return;
@@ -995,7 +985,7 @@
                       ${visibleResults ? visibleResults.map((r, i) => html`
                         <div key=${i} style=${{...styles.outputRow, borderBottom: i < visibleResults.length - 1 ? '1px solid ' + colors.fillSecondary : 'none'}}>
                           <span style=${{fontWeight: '600', color: r.outOfOrder ? colors.destructive : colors.text}}>${r.event}</span>
-                          <span style=${{color: r.outOfOrder ? colors.destructive : colors.textSecondary}}>${formatTime(r.local, referenceDate)}</span>
+                          <span style=${{color: r.outOfOrder ? colors.destructive : colors.textSecondary}}>${formatTime(r.local)}</span>
                         </div>
                       `) : html`
                         <div style=${{color: colors.textSecondary, fontStyle: 'italic', textAlign: 'center', paddingTop: '40px'}}>

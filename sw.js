@@ -1,4 +1,4 @@
-const CACHE_NAME = 'showtime-v1.4.1';
+const CACHE_NAME = 'showtime-v1.4.4';
 const ASSETS = [
   './',
   './index.html',
