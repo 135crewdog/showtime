@@ -169,7 +169,7 @@
         textSecondary: '#98989d',
         accent: '#007aff',
         accentText: '#ffffff',
-        destructive: '#ff3b30',
+        destructive: '#ff453a',
         success: '#34c759',
         fill: '#48484a',
         fillSecondary: '#3a3a3c'
@@ -378,9 +378,9 @@
               ? showMinToTO - briefMinutes
               : stepMinToTO + briefMinutes;
             if (briefMinToTO <= stepMinToTO) {
-              warnings.push({ text: 'Brief falls at or after step — adjust Crew Brief in Setup', severity: 'caution' });
+              warnings.push({ text: 'Brief falls at or after Step — adjust Crew Brief in Setup', severity: 'caution' });
             } else if (briefMinToTO >= showMinToTO) {
-              warnings.push({ text: 'Brief falls at or before show — adjust Crew Brief in Setup', severity: 'caution' });
+              warnings.push({ text: 'Brief falls at or before Show — adjust Crew Brief in Setup', severity: 'caution' });
             }
             const briefLocal = toLocal.minus({ minutes: briefMinToTO });
 
@@ -400,7 +400,7 @@
               let landLocal = parseTime(landTime, toLocal);
               if (landLocal && landLocal < toLocal) {
                 landLocal = landLocal.plus({ days: 1 });
-                warnings.push({ text: 'Land time interpreted as Next Day', severity: 'caution' });
+                warnings.push({ text: 'Land time interpreted as next day', severity: 'caution' });
               }
               if (landLocal) {
                 results.push({ event: 'Land', local: landLocal, show: showLand });
@@ -757,14 +757,14 @@
         },
         warningBannerError: {
           background: activeTheme === 'dark' ? '#2d0a08' : '#fff0ef',
-          border: '1px solid ' + (activeTheme === 'dark' ? 'rgba(255,67,54,0.4)' : 'rgba(255,59,48,0.35)'),
+          border: '1px solid ' + (activeTheme === 'dark' ? 'rgba(255,69,58,0.4)' : 'rgba(255,59,48,0.35)'),
           borderRadius: '10px',
           padding: '12px 16px',
           marginBottom: '16px'
         },
         warningTextError: {
           fontSize: '13px',
-          color: activeTheme === 'dark' ? '#ff453a' : '#c0281e',
+          color: colors.destructive,
           fontWeight: '500'
         }
       }), [colors, colorSchemeProp, activeTheme]);
