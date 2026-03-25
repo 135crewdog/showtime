@@ -324,7 +324,7 @@
               alertLocal = calculatedAlert;
               if (calculatedAlert < lfaLocal) {
                 const minRequired = formatDuration(intervals.lfaToTO.hours * 60 + intervals.lfaToTO.minutes);
-                warnings.push('Alert to T/O less than ' + minRequired);
+                warnings.push({ text: 'Alert to T/O less than ' + minRequired, severity: 'error' });
               }
             } else if (!lfaLocal && toLocal) {
               // Case B: T/O only — LFA = Alert = T/O minus required interval
@@ -378,9 +378,9 @@
               ? showMinToTO - briefMinutes
               : stepMinToTO + briefMinutes;
             if (briefMinToTO <= stepMinToTO) {
-              warnings.push('Brief falls at or after step — adjust Crew Brief in Setup');
+              warnings.push({ text: 'Brief falls at or after step — adjust Crew Brief in Setup', severity: 'caution' });
             } else if (briefMinToTO >= showMinToTO) {
-              warnings.push('Brief falls at or before show — adjust Crew Brief in Setup');
+              warnings.push({ text: 'Brief falls at or before show — adjust Crew Brief in Setup', severity: 'caution' });
             }
             const briefLocal = toLocal.minus({ minutes: briefMinToTO });
 
@@ -400,7 +400,7 @@
               let landLocal = parseTime(landTime, toLocal);
               if (landLocal && landLocal < toLocal) {
                 landLocal = landLocal.plus({ days: 1 });
-                warnings.push('Land time interpreted as Next Day');
+                warnings.push({ text: 'Land time interpreted as Next Day', severity: 'caution' });
               }
               if (landLocal) {
                 results.push({ event: 'Land', local: landLocal, show: showLand });
@@ -417,6 +417,15 @@
             }
             const fdpEndLocal = fdpStartLocal.plus({ hours: fdpHours });
             results.push({ event: 'FDP End', local: fdpEndLocal, show: showFDP });
+          }
+
+          // Mark rows that fall before LFA as out-of-order (tight Case C only)
+          if (alertType === 'LFA' && lfaLocal && alertLocal && alertLocal < lfaLocal) {
+            results.forEach(r => {
+              if (r.event !== 'Crew Rest' && r.event !== 'LFA' && r.local < lfaLocal) {
+                r.outOfOrder = true;
+              }
+            });
           }
 
           results.sort((a, b) => a.local.toMillis() - b.local.toMillis());
@@ -745,6 +754,18 @@
           fontSize: '13px',
           color: activeTheme === 'dark' ? '#ffc107' : '#856404',
           fontWeight: '500'
+        },
+        warningBannerError: {
+          background: activeTheme === 'dark' ? '#2d0a08' : '#fff0ef',
+          border: '1px solid ' + (activeTheme === 'dark' ? 'rgba(255,67,54,0.4)' : 'rgba(255,59,48,0.35)'),
+          borderRadius: '10px',
+          padding: '12px 16px',
+          marginBottom: '16px'
+        },
+        warningTextError: {
+          fontSize: '13px',
+          color: activeTheme === 'dark' ? '#ff453a' : '#c0281e',
+          fontWeight: '500'
         }
       }), [colors, colorSchemeProp, activeTheme]);
 
@@ -956,8 +977,12 @@
 
               <div ref=${tabRefs.current[2]} style=${styles.tabPanel}>
                 ${warnings.length > 0 && html`
-                  <div style=${styles.warningBanner}>
-                    ${warnings.map((w, i) => html`<div key=${i} style=${styles.warningText}>${w}</div>`)}
+                  <div>
+                    ${warnings.map((w, i) => html`
+                      <div key=${i} style=${w.severity === 'error' ? styles.warningBannerError : styles.warningBanner}>
+                        <div style=${w.severity === 'error' ? styles.warningTextError : styles.warningText}>${w.text}</div>
+                      </div>
+                    `)}
                   </div>
                 `}
                 <div style=${styles.section}>
@@ -966,8 +991,8 @@
                     <div style=${styles.outputBox}>
                       ${visibleResults ? visibleResults.map((r, i) => html`
                         <div key=${i} style=${{...styles.outputRow, borderBottom: i < visibleResults.length - 1 ? '1px solid ' + colors.fillSecondary : 'none'}}>
-                          <span style=${{fontWeight: '600', color: colors.text}}>${r.event}</span>
-                          <span style=${{color: colors.textSecondary}}>${formatTime(r.local, referenceDate)}</span>
+                          <span style=${{fontWeight: '600', color: r.outOfOrder ? colors.destructive : colors.text}}>${r.event}</span>
+                          <span style=${{color: r.outOfOrder ? colors.destructive : colors.textSecondary}}>${formatTime(r.local, referenceDate)}</span>
                         </div>
                       `) : html`
                         <div style=${{color: colors.textSecondary, fontStyle: 'italic', textAlign: 'center', paddingTop: '40px'}}>
