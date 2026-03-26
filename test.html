@@ -1421,6 +1421,38 @@
     });
 
     // ============================================================
+    // Season Default Tests
+    // ============================================================
+
+    function getDefaultSeason(month) {
+      return (month >= 3 && month <= 9) ? 'Summer' : 'Winter';
+    }
+
+    test('[Season Default] April (month 3) → Summer', () => {
+      assertEqual(getDefaultSeason(3), 'Summer', 'April');
+    });
+
+    test('[Season Default] October (month 9) → Summer', () => {
+      assertEqual(getDefaultSeason(9), 'Summer', 'October');
+    });
+
+    test('[Season Default] November (month 10) → Winter', () => {
+      assertEqual(getDefaultSeason(10), 'Winter', 'November');
+    });
+
+    test('[Season Default] March (month 2) → Winter', () => {
+      assertEqual(getDefaultSeason(2), 'Winter', 'March');
+    });
+
+    test('[Season Default] January (month 0) → Winter', () => {
+      assertEqual(getDefaultSeason(0), 'Winter', 'January');
+    });
+
+    test('[Season Default] July (month 6) → Summer', () => {
+      assertEqual(getDefaultSeason(6), 'Summer', 'July');
+    });
+
+    // ============================================================
     // Render results
     // ============================================================
 
