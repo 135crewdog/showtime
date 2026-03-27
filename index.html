@@ -80,10 +80,11 @@
 
     const ShowTime = () => {
       const [alertType, setAlertType] = useState('LFA');
-      const [season, setSeason] = useState(() => {
-        const month = new Date().getMonth();
-        return (month >= 3 && month <= 9) ? 'Summer' : 'Winter';
-      });
+      const getDefaultSeason = useCallback((month) => (
+        (month >= 3 && month <= 9) ? 'Summer' : 'Winter'
+      ), []);
+
+      const [season, setSeason] = useState(() => getDefaultSeason(new Date().getMonth()));
       const [formationType, setFormationType] = useState('Single Ship');
       const [crewType, setCrewType] = useState('Basic Crew');
       const [briefMinutes, setBriefMinutes] = useState(30);
@@ -305,17 +306,18 @@
           const results = [];
           const warnings = [];
           const intervals = getIntervals();
+          const missionReference = DateTime.now().setZone(timezone);
 
           let lfaLocal = null;
           let toLocal = null;
 
           if (lfaTime) {
-            lfaLocal = parseTime(lfaTime);
+            lfaLocal = parseTime(lfaTime, missionReference);
             if (!lfaLocal) return null;
           }
 
           if (takeoffTime) {
-            toLocal = parseTime(takeoffTime);
+            toLocal = parseTime(takeoffTime, missionReference);
             if (!toLocal) return null;
           }
 
@@ -439,7 +441,7 @@
           console.error('Calculation error:', err);
           return null;
         }
-      }, [alertType, season, formationType, crewType, briefMinutes, briefReference, parseTime, getIntervals, takeoffTime, landTime, lfaTime,
+      }, [alertType, season, formationType, crewType, briefMinutes, briefReference, parseTime, getIntervals, timezone, takeoffTime, landTime, lfaTime,
           showCrewRest, showLFA, showAlert, showCheckIn, showShow, showBrief, showStep, showStart, showTakeoff, showLand, showFDP]);
 
       const results = computed ? computed.results : null;

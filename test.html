@@ -80,7 +80,7 @@
       const {
         alertType, season, formationType, crewType, timezone,
         inputTimezone, takeoffTime, landTime, lfaTime,
-        briefMinutes = 30, briefReference = 'After Show'
+        briefMinutes = 30, briefReference = 'After Show', referenceDT = null
       } = config;
 
       if (alertType === 'LFA' && !lfaTime && !takeoffTime) return null;
@@ -89,17 +89,18 @@
       const results = [];
       const warnings = [];
       const intervals = getIntervals(season, formationType);
+      const missionReference = referenceDT || DateTime.now().setZone(timezone);
 
       let lfaLocal = null;
       let toLocal = null;
 
       if (lfaTime) {
-        lfaLocal = parseTime(lfaTime, inputTimezone, timezone, null);
+        lfaLocal = parseTime(lfaTime, inputTimezone, timezone, missionReference);
         if (!lfaLocal) return null;
       }
 
       if (takeoffTime) {
-        toLocal = parseTime(takeoffTime, inputTimezone, timezone, null);
+        toLocal = parseTime(takeoffTime, inputTimezone, timezone, missionReference);
         if (!toLocal) return null;
       }
 
@@ -308,6 +309,8 @@
 
     const TZ = 'America/New_York';
     const BASE = { timezone: TZ, inputTimezone: 'L', landTime: '' };
+    const REF_WINTER = DateTime.fromISO('2026-01-15T12:00:00', { zone: TZ });
+    const REF_SUMMER = DateTime.fromISO('2026-07-15T12:00:00', { zone: TZ });
 
     // ============================================================
     // 1. All 16 configuration combos (T/O at 1000L)
@@ -492,6 +495,17 @@
       assertClose(lfa, '0515', 'LFA derived from T/O (Winter)');
     });
 
+    test('[TO-only] Alert equals derived LFA in LFA mode', () => {
+      const result = calculate({
+        ...BASE, alertType: 'LFA', season: 'Summer', formationType: 'Single Ship',
+        crewType: 'Basic Crew', takeoffTime: '1000', lfaTime: ''
+      });
+      const lfa = findEvent(result.results, 'LFA');
+      const alert = findEvent(result.results, 'Alert');
+      assertNotNull(alert, 'Alert should exist');
+      assertClose(alert, fmt(lfa), 'Alert should match derived LFA');
+    });
+
     // ============================================================
     // 3. Case C (both LFA + T/O) — alert calculation & warnings
     // ============================================================
@@ -629,9 +643,16 @@
     // ============================================================
 
     test('[Zulu] T/O 1500Z in New York winter (EST, UTC-5) = 1000L', () => {
-      const dt = parseTime('1500', 'Z', 'America/New_York', null);
+      const dt = parseTime('1500', 'Z', 'America/New_York', REF_WINTER);
       assertNotNull(dt, 'parsed time');
       assertEqual(dt.hour, 10, 'Local hour');
+      assertEqual(dt.minute, 0, 'Local minute');
+    });
+
+    test('[Zulu] T/O 1500Z in New York summer (EDT, UTC-4) = 1100L', () => {
+      const dt = parseTime('1500', 'Z', 'America/New_York', REF_SUMMER);
+      assertNotNull(dt, 'parsed time');
+      assertEqual(dt.hour, 11, 'Local hour');
       assertEqual(dt.minute, 0, 'Local minute');
     });
 
@@ -639,7 +660,7 @@
       const result = calculate({
         timezone: 'America/New_York', inputTimezone: 'Z',
         alertType: 'Self Alert', season: 'Summer', formationType: 'Single Ship',
-        crewType: 'Basic Crew', takeoffTime: '1500', landTime: '', lfaTime: ''
+        crewType: 'Basic Crew', takeoffTime: '1500', landTime: '', lfaTime: '', referenceDT: REF_WINTER
       });
       assertNotNull(result, 'result');
       const to = findEvent(result.results, 'T/O');
@@ -652,7 +673,7 @@
       const result = calculate({
         timezone: 'America/New_York', inputTimezone: 'Z',
         alertType: 'LFA', season: 'Summer', formationType: 'Single Ship',
-        crewType: 'Basic Crew', lfaTime: '1000', takeoffTime: '', landTime: ''
+        crewType: 'Basic Crew', lfaTime: '1000', takeoffTime: '', landTime: '', referenceDT: REF_WINTER
       });
       assertNotNull(result, 'result');
       const lfa = findEvent(result.results, 'LFA');
