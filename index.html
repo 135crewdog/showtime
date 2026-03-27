@@ -80,11 +80,10 @@
 
     const ShowTime = () => {
       const [alertType, setAlertType] = useState('LFA');
-      const getDefaultSeason = useCallback((month) => (
-        (month >= 3 && month <= 9) ? 'Summer' : 'Winter'
-      ), []);
-
-      const [season, setSeason] = useState(() => getDefaultSeason(new Date().getMonth()));
+      const [season, setSeason] = useState(() => {
+        const month = new Date().getMonth();
+        return (month >= 3 && month <= 9) ? 'Summer' : 'Winter';
+      });
       const [formationType, setFormationType] = useState('Single Ship');
       const [crewType, setCrewType] = useState('Basic Crew');
       const [briefMinutes, setBriefMinutes] = useState(30);
