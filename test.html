@@ -636,6 +636,14 @@
       assertEqual(dt.minute, 0, 'Local minute');
     });
 
+    test('[Zulu] T/O 1500Z in New York summer (EDT, UTC-4) = 1100L', () => {
+      const summerRef = DateTime.fromObject({ year: 2025, month: 7, day: 15, hour: 12 }, { zone: 'America/New_York' });
+      const dt = parseTime('1500', 'Z', 'America/New_York', summerRef);
+      assertNotNull(dt, 'parsed time');
+      assertEqual(dt.hour, 11, 'Local hour');
+      assertEqual(dt.minute, 0, 'Local minute');
+    });
+
     test('[Zulu] Full calculation with Zulu input', () => {
       const result = calculate({
         timezone: 'America/New_York', inputTimezone: 'Z',
