@@ -109,7 +109,7 @@
       const [showFDP, setShowFDP] = useState(false);
 
       const [copySuccess, setCopySuccess] = useState(false);
-      const [copyHtmlSuccess, setCopyHtmlSuccess] = useState(false);
+      const [copyMdSuccess, setCopyMdSuccess] = useState(false);
       const [currentTab, setCurrentTab] = useState(0);
       const [showSettings, setShowSettings] = useState(false);
       const tabRefs = useRef([React.createRef(), React.createRef(), React.createRef()]);
@@ -474,54 +474,25 @@
         }
       }, [outputText]);
 
-      const outputHtml = useMemo(() => {
+      const outputMarkdown = useMemo(() => {
         if (!results) return '';
         const rows = results
           .filter(r => r.show)
-          .map(r => `<tr><td style="padding:2px 16px 2px 0;font-weight:600;">${r.event}</td><td style="padding:2px 16px 2px 0;font-family:monospace;">${r.local.toFormat('HHmm')}L</td><td style="padding:2px 0;font-family:monospace;">${r.local.toUTC().toFormat('HHmm')}Z</td></tr>`)
-          .join('');
-        return `<style>@media (prefers-color-scheme:dark){.st-tbl,.st-tbl td{color:#e8e8e8;}}</style><table class="st-tbl" style="border-collapse:collapse;font-family:sans-serif;font-size:14px;color:inherit;">${rows}</table>`;
+          .map(r => `| ${r.event} | ${r.local.toFormat('HHmm')}L | ${r.local.toUTC().toFormat('HHmm')}Z |`);
+        return ['| Event | Local | Zulu |', '| --- | --- | --- |', ...rows].join('\n');
       }, [results]);
 
-      const copyToClipboardHtml = useCallback(async () => {
-        if (!outputHtml) return;
-        // Try modern ClipboardItem API (text/html only, so pasting in rich text gives a table)
-        if (typeof ClipboardItem !== 'undefined') {
-          try {
-            await navigator.clipboard.write([
-              new ClipboardItem({
-                'text/html': new Blob([outputHtml], { type: 'text/html' }),
-              })
-            ]);
-            setCopyHtmlSuccess(true);
-            setTimeout(() => setCopyHtmlSuccess(false), 2000);
-            return;
-          } catch (err) {
-            // fall through to execCommand fallback
-          }
-        }
-        // Fallback: inject into a hidden contenteditable and execCommand('copy')
+      const copyToClipboardMd = useCallback(async () => {
+        if (!outputMarkdown) return;
         try {
-          const el = document.createElement('div');
-          el.setAttribute('contenteditable', 'true');
-          el.style.cssText = 'position:fixed;left:-9999px;top:0;opacity:0;';
-          el.innerHTML = outputHtml;
-          document.body.appendChild(el);
-          const sel = window.getSelection();
-          sel.removeAllRanges();
-          const range = document.createRange();
-          range.selectNodeContents(el);
-          sel.addRange(range);
-          document.execCommand('copy');
-          sel.removeAllRanges();
-          document.body.removeChild(el);
-          setCopyHtmlSuccess(true);
-          setTimeout(() => setCopyHtmlSuccess(false), 2000);
-        } catch (err2) {
-          console.error('Clipboard error:', err2);
+          await navigator.clipboard.writeText(outputMarkdown);
+          setCopyMdSuccess(true);
+          setTimeout(() => setCopyMdSuccess(false), 2000);
+        } catch (err) {
+          console.error('Clipboard error:', err);
           alert('Could not copy to clipboard. Please check permissions.');
         }
-      }, [outputHtml]);
+      }, [outputMarkdown]);
 
       const tabs = ['Setup', 'Times', 'Output'];
       const colorSchemeProp = activeTheme === 'dark' ? 'dark' : 'light';
@@ -985,23 +956,37 @@
                   <div style=${styles.sectionTitle}>CREW TIMING MESSAGE</div>
                   <div style=${styles.sectionContent}>
                     <div style=${styles.outputBox}>
-                      ${visibleResults ? visibleResults.map((r, i) => html`
-                        <div key=${i} style=${{...styles.outputRow, borderBottom: i < visibleResults.length - 1 ? '1px solid ' + colors.fillSecondary : 'none'}}>
-                          <span style=${{fontWeight: '600', color: r.outOfOrder ? colors.destructive : colors.text}}>${r.event}</span>
-                          <span style=${{color: r.outOfOrder ? colors.destructive : colors.textSecondary}}>${formatTime(r.local)}</span>
-                        </div>
-                      `) : html`
+                      ${visibleResults ? html`
+                        <table style=${{width: '100%', borderCollapse: 'collapse'}}>
+                          <thead>
+                            <tr style=${{borderBottom: '2px solid ' + colors.fillSecondary}}>
+                              <th style=${{textAlign: 'left', paddingBottom: '8px', color: colors.textSecondary, fontWeight: '500', fontSize: '12px'}}>Event</th>
+                              <th style=${{textAlign: 'right', paddingBottom: '8px', color: colors.textSecondary, fontWeight: '500', fontSize: '12px'}}>Local</th>
+                              <th style=${{textAlign: 'right', paddingBottom: '8px', color: colors.textSecondary, fontWeight: '500', fontSize: '12px'}}>Zulu</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            ${visibleResults.map((r, i) => html`
+                              <tr key=${i} style=${{borderBottom: i < visibleResults.length - 1 ? '1px solid ' + colors.fillSecondary : 'none'}}>
+                                <td style=${{fontWeight: '600', color: r.outOfOrder ? colors.destructive : colors.text, paddingTop: '8px', paddingBottom: '8px'}}>${r.event}</td>
+                                <td style=${{textAlign: 'right', color: r.outOfOrder ? colors.destructive : colors.textSecondary, paddingTop: '8px', paddingBottom: '8px'}}>${r.local.toFormat('HHmm')}L</td>
+                                <td style=${{textAlign: 'right', color: r.outOfOrder ? colors.destructive : colors.textSecondary, paddingTop: '8px', paddingBottom: '8px'}}>${r.local.toUTC().toFormat('HHmm')}Z</td>
+                              </tr>
+                            `)}
+                          </tbody>
+                        </table>
+                      ` : html`
                         <div style=${{color: colors.textSecondary, fontStyle: 'italic', textAlign: 'center', paddingTop: '40px'}}>
                           ${alertType === 'LFA' ? 'Enter LFA or Takeoff time' : 'Enter Takeoff time'}
                         </div>
                       `}
                     </div>
                     <div style=${{display: 'flex', gap: '8px', marginTop: '16px'}}>
-                      <button onClick=${copyToClipboard} disabled=${!results} style=${{...styles.btn, ...(copySuccess ? styles.btnSuccess : styles.btnPrimary), flex: 1, opacity: results ? 1 : 0.5}}>
-                        ${copySuccess ? '\u2713 Copied' : 'Copy Text for Chat'}
+                      <button onClick=${copyToClipboardMd} disabled=${!results} style=${{...styles.btn, ...(copyMdSuccess ? styles.btnSuccess : styles.btnPrimary), flex: 1, opacity: results ? 1 : 0.5}}>
+                        ${copyMdSuccess ? '\u2713 Copied' : 'Copy Table'}
                       </button>
-                      <button onClick=${copyToClipboardHtml} disabled=${!results} style=${{...styles.btn, ...(copyHtmlSuccess ? styles.btnSuccess : styles.btnSecondary), flex: 1, opacity: results ? 1 : 0.5}}>
-                        ${copyHtmlSuccess ? '\u2713 Copied' : 'Copy HTML for Email'}
+                      <button onClick=${copyToClipboard} disabled=${!results} style=${{...styles.btn, ...(copySuccess ? styles.btnSuccess : styles.btnSecondary), flex: 1, opacity: results ? 1 : 0.5}}>
+                        ${copySuccess ? '\u2713 Copied' : 'Copy Plain Text'}
                       </button>
                     </div>
                   </div>
