@@ -289,10 +289,20 @@
       const resolveTime = useCallback((timeStr, refDT, direction) => {
         const dt = parseTime(timeStr, refDT);
         if (!dt || !refDT) return dt;
-        if (direction === 'before' && dt > refDT) return dt.minus({ days: 1 });
-        if (direction === 'after'  && dt < refDT) return dt.plus({ days: 1 });
+        // For Zulu input, roll the day in UTC to avoid DST offset shifts on
+        // transition boundaries; then re-express in the display zone.
+        if (direction === 'before' && dt > refDT) {
+          return inputTimezone === 'Z'
+            ? dt.toUTC().minus({ days: 1 }).setZone(timezone)
+            : dt.minus({ days: 1 });
+        }
+        if (direction === 'after'  && dt < refDT) {
+          return inputTimezone === 'Z'
+            ? dt.toUTC().plus({ days: 1 }).setZone(timezone)
+            : dt.plus({ days: 1 });
+        }
         return dt;
-      }, [parseTime]);
+      }, [parseTime, inputTimezone, timezone]);
 
       const getIntervals = useCallback(() => {
         const isSummer = season === 'Summer';
@@ -851,7 +861,7 @@
                   <a href="mailto:135crewdog.github@gmail.com?subject=Show%20Time%20App%20Feedback" style=${{display: 'block', textAlign: 'center', padding: '12px 16px', color: colors.accent, fontSize: '17px', fontWeight: '500', textDecoration: 'none'}}>Send Feedback</a>
                 </div>
               </div>
-              <div style=${{textAlign: 'center', marginTop: '32px', paddingBottom: '32px', fontSize: '13px', color: colors.textSecondary}}>Show Time v1.5.1</div>
+              <div style=${{textAlign: 'center', marginTop: '32px', paddingBottom: '32px', fontSize: '13px', color: colors.textSecondary}}>Show Time v1.5.2</div>
             </div>
           </div>
         `;
