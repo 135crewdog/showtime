@@ -35,7 +35,7 @@
     const { DateTime } = luxon;
 
     // ============================================================
-    // Extract pure calculation logic — mirrors index.html v1.5.1
+    // Extract pure calculation logic — mirrors index.html v1.5.2
     // ============================================================
 
     const formatDuration = (totalMin) => {
@@ -1688,6 +1688,76 @@
         crewType: 'Basic Crew', lfaTime: '2200', takeoffTime: '0500', landTime: ''
       });
       assertClose(findEvent(result.results, 'Crew Rest'), '1100', 'Crew Rest = FDP start - 12hr');
+    });
+
+    // ============================================================
+    // 18. resolveTime DST boundary correctness (v1.5.2)
+    //
+    // When inputTimezone is 'Z', day rollovers must be applied in
+    // UTC so the correct UTC instant is preserved on DST transitions.
+    // With the old wall-clock rollover (dt.minus/plus({ days: 1 })),
+    // crossing a spring/fall DST boundary shifts the underlying UTC
+    // instant by the offset change (60 min). These tests call
+    // resolveTime() directly with hardcoded reference DateTimes on
+    // known America/New_York transition dates (2026-03-08 spring,
+    // 2026-11-01 fall) to verify the fix.
+    // ============================================================
+
+    test('[DST] Spring-forward: LFA 2200Z / T/O 0500Z — LFA resolves to 2200Z not 2300Z', () => {
+      // America/New_York springs forward on 2026-03-08 (UTC-5 → UTC-4).
+      // T/O anchor: 2026-03-08 05:00 UTC (post-transition, UTC-4).
+      // LFA 2200Z must land at 2026-03-07 22:00 UTC.
+      // Old code: dt.minus({days:1}) in wall-clock → 2026-03-07 23:00 UTC (wrong, +1 h).
+      const tz = 'America/New_York';
+      const toRef = DateTime.utc(2026, 3, 8, 5, 0).setZone(tz);
+      const lfa = resolveTime('2200', 'Z', tz, toRef, 'before');
+      assertEqual(lfa.toUTC().hour, 22, 'LFA UTC hour is 22 (2200Z)');
+      assertEqual(lfa.toUTC().day,   7, 'LFA is on March 7');
+      assertTrue(lfa < toRef, 'LFA is before T/O');
+    });
+
+    test('[DST] Fall-back: LFA 2200Z / T/O 0500Z — LFA resolves to 2200Z not 2100Z', () => {
+      // America/New_York falls back on 2026-11-01 (UTC-4 → UTC-5).
+      // T/O anchor: 2026-11-01 05:00 UTC (post-transition, UTC-5).
+      // LFA 2200Z must land at 2026-10-31 22:00 UTC.
+      // Old code: dt.minus({days:1}) in wall-clock → 2026-10-31 21:00 UTC (wrong, -1 h).
+      const tz = 'America/New_York';
+      const toRef = DateTime.utc(2026, 11, 1, 5, 0).setZone(tz);
+      const lfa = resolveTime('2200', 'Z', tz, toRef, 'before');
+      assertEqual(lfa.toUTC().hour, 22, 'LFA UTC hour is 22 (2200Z)');
+      assertEqual(lfa.toUTC().day,  31, 'LFA is on Oct 31');
+      assertTrue(lfa < toRef, 'LFA is before T/O');
+    });
+
+    test('[DST] Spring-forward: Land 0200Z / T/O 2100Z — Land resolves to 0200Z not 0100Z', () => {
+      // T/O anchor: 2026-03-08 21:00 UTC (spring-forward day, UTC-4).
+      // Land 0200Z must land at 2026-03-09 02:00 UTC.
+      // Old code: dt.plus({days:1}) in wall-clock → 2026-03-09 01:00 UTC (wrong, -1 h).
+      const tz = 'America/New_York';
+      const toRef = DateTime.utc(2026, 3, 8, 21, 0).setZone(tz);
+      const land = resolveTime('0200', 'Z', tz, toRef, 'after');
+      assertEqual(land.toUTC().hour, 2, 'Land UTC hour is 02 (0200Z)');
+      assertEqual(land.toUTC().day,  9, 'Land is on March 9');
+      assertTrue(land > toRef, 'Land is after T/O');
+    });
+
+    test('[DST] UTC display zone: LFA 2200Z / T/O 0500Z — no DST, result unchanged', () => {
+      // UTC has no offset changes; fix must not break this case.
+      const tz = 'UTC';
+      const toRef = DateTime.utc(2026, 3, 8, 5, 0).setZone(tz);
+      const lfa = resolveTime('2200', 'Z', tz, toRef, 'before');
+      assertEqual(lfa.toUTC().hour, 22, 'LFA UTC hour is 22 (2200Z)');
+      assertEqual(lfa.toUTC().day,   7, 'LFA is on March 7');
+      assertTrue(lfa < toRef, 'LFA is before T/O');
+    });
+
+    test('[DST] Local input timezone: LFA 2200 / T/O 0500 — wall-clock path unaffected', () => {
+      // When inputTimezone is not 'Z', the wall-clock minus({days:1}) is still used.
+      const tz = 'America/New_York';
+      const toRef = DateTime.now().setZone(tz).set({ hour: 5, minute: 0, second: 0, millisecond: 0 });
+      const lfa = resolveTime('2200', 'Local', tz, toRef, 'before');
+      assertEqual(lfa.hour, 22, 'LFA local hour is 22');
+      assertTrue(lfa < toRef, 'LFA is before T/O');
     });
 
     // ============================================================
