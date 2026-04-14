@@ -83,8 +83,18 @@
     function resolveTime(timeStr, inputTimezone, timezone, refDT, direction) {
       const dt = parseTime(timeStr, inputTimezone, timezone, refDT);
       if (!dt || !refDT) return dt;
-      if (direction === 'before' && dt > refDT) return dt.minus({ days: 1 });
-      if (direction === 'after'  && dt < refDT) return dt.plus({ days: 1 });
+      // For Zulu input, roll the day in UTC to avoid DST offset shifts on
+      // transition boundaries; then re-express in the display zone.
+      if (direction === 'before' && dt > refDT) {
+        return inputTimezone === 'Z'
+          ? dt.toUTC().minus({ days: 1 }).setZone(timezone)
+          : dt.minus({ days: 1 });
+      }
+      if (direction === 'after'  && dt < refDT) {
+        return inputTimezone === 'Z'
+          ? dt.toUTC().plus({ days: 1 }).setZone(timezone)
+          : dt.plus({ days: 1 });
+      }
       return dt;
     }
 
