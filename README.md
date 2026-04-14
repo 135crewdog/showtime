@@ -4,7 +4,7 @@ KC-135 mission timing calculator for aircrew. Given a takeoff time or LFA, Show 
 
 Installable as a PWA on iOS and Android. Works offline after first load.
 
-**Current version: v1.4.4**
+**Current version: v1.5.0**
 
 ---
 
