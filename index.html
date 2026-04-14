@@ -280,6 +280,20 @@
         return dt;
       }, [inputTimezone, timezone]);
 
+      // Resolve a user-entered time relative to a reference DateTime.
+      // direction 'before': if the parsed time falls after refDT (same calendar day),
+      //   step back one day — e.g. LFA 2200Z with T/O 0500Z next morning.
+      // direction 'after': if the parsed time falls before refDT (same calendar day),
+      //   step forward one day — e.g. Land 0200Z with T/O 2300Z.
+      // When refDT is null (only one time provided), no adjustment is possible.
+      const resolveTime = useCallback((timeStr, refDT, direction) => {
+        const dt = parseTime(timeStr, refDT);
+        if (!dt || !refDT) return dt;
+        if (direction === 'before' && dt > refDT) return dt.minus({ days: 1 });
+        if (direction === 'after'  && dt < refDT) return dt.plus({ days: 1 });
+        return dt;
+      }, [parseTime]);
+
       const getIntervals = useCallback(() => {
         const isSummer = season === 'Summer';
         const isSingleShip = formationType === 'Single Ship';
@@ -313,20 +327,17 @@
           let toLocal = null;
           let duration = null;
 
-          if (lfaTime) {
-            lfaLocal = parseTime(lfaTime);
-            if (!lfaLocal) return null;
-          }
-
+          // Parse T/O first — it is the master anchor for all other times.
           if (takeoffTime) {
             toLocal = parseTime(takeoffTime);
             if (!toLocal) return null;
           }
 
-          // If both times are provided and LFA appears to be after T/O on the same calendar day,
-          // LFA is on the previous day (e.g., LFA 2200Z with T/O 0500Z next day).
-          if (lfaLocal && toLocal && lfaLocal > toLocal) {
-            lfaLocal = lfaLocal.minus({ days: 1 });
+          // LFA must occur before T/O. resolveTime steps back one day when the
+          // entered time is numerically after T/O (e.g. LFA 2200Z, T/O 0500Z).
+          if (lfaTime) {
+            lfaLocal = resolveTime(lfaTime, toLocal, 'before');
+            if (!lfaLocal) return null;
           }
 
           let alertLocal = null;
@@ -411,9 +422,11 @@
             );
 
             if (landTime) {
-              let landLocal = parseTime(landTime, toLocal);
-              if (landLocal && landLocal < toLocal) {
-                landLocal = landLocal.plus({ days: 1 });
+              // Land must occur after T/O. resolveTime steps forward one day when the
+              // entered time is numerically before T/O (e.g. Land 0200Z, T/O 2300Z).
+              const landRaw   = parseTime(landTime, toLocal);
+              const landLocal = resolveTime(landTime, toLocal, 'after');
+              if (landRaw && landLocal && landRaw < toLocal) {
                 warnings.push({ text: 'Land time interpreted as next day', severity: 'caution' });
               }
               if (landLocal) {
@@ -450,7 +463,7 @@
           console.error('Calculation error:', err);
           return null;
         }
-      }, [alertType, season, formationType, crewType, briefMinutes, briefReference, parseTime, getIntervals, takeoffTime, landTime, lfaTime,
+      }, [alertType, season, formationType, crewType, briefMinutes, briefReference, parseTime, resolveTime, getIntervals, takeoffTime, landTime, lfaTime,
           showCrewRest, showLFA, showAlert, showCheckIn, showShow, showBrief, showStep, showStart, showTakeoff, showLand, showFDP]);
 
       const results = computed ? computed.results : null;
