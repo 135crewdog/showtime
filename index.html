@@ -323,6 +323,12 @@
             if (!toLocal) return null;
           }
 
+          // If both times are provided and LFA appears to be after T/O on the same calendar day,
+          // LFA is on the previous day (e.g., LFA 2200Z with T/O 0500Z next day).
+          if (lfaLocal && toLocal && lfaLocal > toLocal) {
+            lfaLocal = lfaLocal.minus({ days: 1 });
+          }
+
           let alertLocal = null;
 
           if (alertType === 'LFA') {
