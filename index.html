@@ -107,6 +107,7 @@
       const [showTakeoff, setShowTakeoff] = useState(true);
       const [showLand, setShowLand] = useState(true);
       const [showFDP, setShowFDP] = useState(false);
+      const [showDur, setShowDur] = useState(false);
 
       const [copySuccess, setCopySuccess] = useState(false);
       const [copyMdSuccess, setCopyMdSuccess] = useState(false);
@@ -142,6 +143,7 @@
           setShowTakeoff(true);
           setShowLand(false);
           setShowFDP(false);
+          setShowDur(false);
         } else if (takeoffTime) {
           setShowCrewRest(true);
           setShowLFA(alertType === 'LFA');
@@ -154,6 +156,7 @@
           setShowTakeoff(true);
           setShowLand(!!landTime);
           setShowFDP(false);
+          setShowDur(!!landTime);
         }
       }, [lfaTime, takeoffTime, landTime, alertType, formationType]);
 
@@ -308,6 +311,7 @@
 
           let lfaLocal = null;
           let toLocal = null;
+          let duration = null;
 
           if (lfaTime) {
             lfaLocal = parseTime(lfaTime);
@@ -408,6 +412,7 @@
               }
               if (landLocal) {
                 results.push({ event: 'Land', local: landLocal, show: showLand });
+                duration = formatDuration(landLocal.diff(toLocal, 'minutes').minutes);
               }
             }
 
@@ -434,7 +439,7 @@
 
           results.sort((a, b) => a.local.toMillis() - b.local.toMillis());
 
-          return { results, warnings };
+          return { results, warnings, duration };
         } catch (err) {
           console.error('Calculation error:', err);
           return null;
@@ -444,6 +449,7 @@
 
       const results = computed ? computed.results : null;
       const warnings = computed ? computed.warnings : [];
+      const duration = computed ? computed.duration : null;
 
       const formatTime = useCallback((dt) => {
         if (!dt) return '';
@@ -457,11 +463,12 @@
       const outputText = useMemo(() => {
         if (!results) return 'Invalid inputs';
 
-        return results
+        const lines = results
           .filter(r => r.show)
-          .map(r => r.event + ' ' + formatTime(r.local))
-          .join('\n');
-      }, [results, formatTime]);
+          .map(r => r.event + ' ' + formatTime(r.local));
+        if (duration && showDur) lines.push('Dur ' + duration);
+        return lines.join('\n');
+      }, [results, formatTime, duration, showDur]);
 
       const copyToClipboard = useCallback(async () => {
         try {
@@ -479,8 +486,9 @@
         const rows = results
           .filter(r => r.show)
           .map(r => `| ${r.event} | ${r.local.toFormat('HHmm')}L | ${r.local.toUTC().toFormat('HHmm')}Z |`);
+        if (duration && showDur) rows.push(`| Dur | ${duration} |  |`);
         return ['| Event | Local | Zulu |', '| --- | --- | --- |', ...rows].join('\n');
-      }, [results]);
+      }, [results, duration, showDur]);
 
       const copyToClipboardMd = useCallback(async () => {
         if (!outputMarkdown) return;
@@ -668,13 +676,11 @@
           gap: '8px'
         },
         outputBox: {
-          background: colors.fill,
-          borderRadius: '10px',
-          padding: '16px',
+          background: 'transparent',
           minHeight: '200px',
           fontFamily: '"SF Mono", Monaco, monospace',
-          fontSize: '14px',
-          lineHeight: '1.8'
+          fontSize: '15px',
+          lineHeight: '1.5'
         },
         outputRow: {
           display: 'flex',
@@ -711,15 +717,15 @@
           marginTop: '4px'
         },
         warningBanner: {
-          background: activeTheme === 'dark' ? '#3a2e00' : '#fff3cd',
-          border: '1px solid ' + (activeTheme === 'dark' ? '#665200' : '#ffc107'),
+          background: activeTheme === 'dark' ? '#3d2e00' : '#fff9e6',
+          border: '1px solid ' + (activeTheme === 'dark' ? 'rgba(255,214,10,0.4)' : 'rgba(255,204,0,0.5)'),
           borderRadius: '10px',
           padding: '12px 16px',
           marginBottom: '16px'
         },
         warningText: {
           fontSize: '13px',
-          color: activeTheme === 'dark' ? '#ffc107' : '#856404',
+          color: activeTheme === 'dark' ? '#ffd60a' : '#8a6400',
           fontWeight: '500'
         },
         warningBannerError: {
@@ -826,7 +832,7 @@
                   <a href="mailto:135crewdog.github@gmail.com?subject=Show%20Time%20App%20Feedback" style=${{display: 'block', textAlign: 'center', padding: '12px 16px', color: colors.accent, fontSize: '17px', fontWeight: '500', textDecoration: 'none'}}>Send Feedback</a>
                 </div>
               </div>
-              <div style=${{textAlign: 'center', marginTop: '32px', paddingBottom: '32px', fontSize: '13px', color: colors.textSecondary}}>Show Time v1.4.4</div>
+              <div style=${{textAlign: 'center', marginTop: '32px', paddingBottom: '32px', fontSize: '13px', color: colors.textSecondary}}>Show Time v1.5.0</div>
             </div>
           </div>
         `;
@@ -897,7 +903,7 @@
                       <select id="timezone" value=${timezone} onChange=${(e) => setTimezone(e.target.value)} style=${styles.selectFull}>
                         ${timezones.map(tz => html`<option key=${tz} value=${tz}>${tz.replace(/_/g, ' ')}</option>`)}
                       </select>
-                      ${hasDSTTransitionToday && html`<div style=${{fontSize: '12px', color: activeTheme === 'dark' ? '#ffc107' : '#856404', marginTop: '6px'}}>DST transition today — verify your Season setting.</div>`}
+                      ${hasDSTTransitionToday && html`<div style=${{fontSize: '12px', color: activeTheme === 'dark' ? '#ffd60a' : '#8a6400', marginTop: '6px'}}>DST transition today — verify your Season setting.</div>`}
                     </div>
                   </div>
                 </div>
@@ -959,20 +965,27 @@
                       ${visibleResults ? html`
                         <table style=${{width: '100%', borderCollapse: 'collapse'}}>
                           <thead>
-                            <tr style=${{borderBottom: '2px solid ' + colors.fillSecondary}}>
-                              <th style=${{textAlign: 'left', paddingBottom: '8px', color: colors.textSecondary, fontWeight: '500', fontSize: '12px'}}>Event</th>
-                              <th style=${{textAlign: 'right', paddingBottom: '8px', color: colors.textSecondary, fontWeight: '500', fontSize: '12px'}}>Local</th>
-                              <th style=${{textAlign: 'right', paddingBottom: '8px', color: colors.textSecondary, fontWeight: '500', fontSize: '12px'}}>Zulu</th>
+                            <tr style=${{borderBottom: '1px solid ' + colors.border}}>
+                              <th style=${{textAlign: 'left', paddingBottom: '8px', color: colors.textSecondary, fontWeight: '400', fontSize: '12px', textTransform: 'uppercase', letterSpacing: '0.5px'}}>Event</th>
+                              <th style=${{textAlign: 'right', paddingBottom: '8px', color: colors.textSecondary, fontWeight: '400', fontSize: '12px', textTransform: 'uppercase', letterSpacing: '0.5px'}}>Local</th>
+                              <th style=${{textAlign: 'right', paddingBottom: '8px', color: colors.textSecondary, fontWeight: '400', fontSize: '12px', textTransform: 'uppercase', letterSpacing: '0.5px'}}>Zulu</th>
                             </tr>
                           </thead>
                           <tbody>
                             ${visibleResults.map((r, i) => html`
-                              <tr key=${i} style=${{borderBottom: i < visibleResults.length - 1 ? '1px solid ' + colors.fillSecondary : 'none'}}>
-                                <td style=${{fontWeight: '600', color: r.outOfOrder ? colors.destructive : colors.text, paddingTop: '8px', paddingBottom: '8px'}}>${r.event}</td>
-                                <td style=${{textAlign: 'right', color: r.outOfOrder ? colors.destructive : colors.textSecondary, paddingTop: '8px', paddingBottom: '8px'}}>${r.local.toFormat('HHmm')}L</td>
-                                <td style=${{textAlign: 'right', color: r.outOfOrder ? colors.destructive : colors.textSecondary, paddingTop: '8px', paddingBottom: '8px'}}>${r.local.toUTC().toFormat('HHmm')}Z</td>
+                              <tr key=${i} style=${{borderBottom: (i < visibleResults.length - 1 || (duration && showDur)) ? '1px solid ' + colors.border : 'none'}}>
+                                <td style=${{fontWeight: '600', color: r.outOfOrder ? colors.destructive : colors.text, paddingTop: '10px', paddingBottom: '10px'}}>${r.event}</td>
+                                <td style=${{textAlign: 'right', color: r.outOfOrder ? colors.destructive : colors.text, paddingTop: '10px', paddingBottom: '10px'}}>${r.local.toFormat('HHmm')}L</td>
+                                <td style=${{textAlign: 'right', color: r.outOfOrder ? colors.destructive : colors.text, paddingTop: '10px', paddingBottom: '10px'}}>${r.local.toUTC().toFormat('HHmm')}Z</td>
                               </tr>
                             `)}
+                            ${duration && showDur && html`
+                              <tr key="dur">
+                                <td style=${{fontWeight: '600', color: colors.text, paddingTop: '10px', paddingBottom: '10px'}}>Dur</td>
+                                <td style=${{textAlign: 'right', color: colors.text, paddingTop: '10px', paddingBottom: '10px'}}>${duration}</td>
+                                <td></td>
+                              </tr>
+                            `}
                           </tbody>
                         </table>
                       ` : html`
@@ -1005,6 +1018,7 @@
                       <label style=${styles.checkboxLabel}><input type="checkbox" checked=${showStart} onChange=${(e) => setShowStart(e.target.checked)} style=${styles.checkbox} />Start</label>
                       <label style=${styles.checkboxLabel}><input type="checkbox" checked=${showTakeoff} onChange=${(e) => setShowTakeoff(e.target.checked)} style=${styles.checkbox} />T/O</label>
                       <label style=${styles.checkboxLabel}><input type="checkbox" checked=${showLand} onChange=${(e) => setShowLand(e.target.checked)} style=${styles.checkbox} />Land</label>
+                      ${landTime && html`<label style=${styles.checkboxLabel}><input type="checkbox" checked=${showDur} onChange=${(e) => setShowDur(e.target.checked)} style=${styles.checkbox} />Dur</label>`}
                       <label style=${styles.checkboxLabel}><input type="checkbox" checked=${showFDP} onChange=${(e) => setShowFDP(e.target.checked)} style=${styles.checkbox} />FDP End</label>
                     </div>
                   </div>
