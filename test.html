@@ -35,7 +35,7 @@
     const { DateTime } = luxon;
 
     // ============================================================
-    // Extract pure calculation logic — mirrors index.html v1.4.4
+    // Extract pure calculation logic — mirrors index.html v1.5.1
     // ============================================================
 
     const formatDuration = (totalMin) => {
@@ -76,6 +76,18 @@
       return dt;
     }
 
+    // Resolve a user-entered time relative to a reference DateTime.
+    // direction 'before': step back one day if parsed time falls after refDT.
+    // direction 'after':  step forward one day if parsed time falls before refDT.
+    // When refDT is null no adjustment is possible (single-time-entered case).
+    function resolveTime(timeStr, inputTimezone, timezone, refDT, direction) {
+      const dt = parseTime(timeStr, inputTimezone, timezone, refDT);
+      if (!dt || !refDT) return dt;
+      if (direction === 'before' && dt > refDT) return dt.minus({ days: 1 });
+      if (direction === 'after'  && dt < refDT) return dt.plus({ days: 1 });
+      return dt;
+    }
+
     function calculate(config) {
       const {
         alertType, season, formationType, crewType, timezone,
@@ -93,14 +105,17 @@
       let lfaLocal = null;
       let toLocal = null;
 
-      if (lfaTime) {
-        lfaLocal = parseTime(lfaTime, inputTimezone, timezone, null);
-        if (!lfaLocal) return null;
-      }
-
+      // Parse T/O first — it is the master anchor for all other times.
       if (takeoffTime) {
         toLocal = parseTime(takeoffTime, inputTimezone, timezone, null);
         if (!toLocal) return null;
+      }
+
+      // LFA must occur before T/O. resolveTime steps back one day when the
+      // entered time is numerically after T/O (e.g. LFA 2200, T/O 0500).
+      if (lfaTime) {
+        lfaLocal = resolveTime(lfaTime, inputTimezone, timezone, toLocal, 'before');
+        if (!lfaLocal) return null;
       }
 
       let alertLocal = null;
@@ -185,9 +200,11 @@
         );
 
         if (landTime) {
-          let landLocal = parseTime(landTime, inputTimezone, timezone, toLocal);
-          if (landLocal && landLocal < toLocal) {
-            landLocal = landLocal.plus({ days: 1 });
+          // Land must occur after T/O. resolveTime steps forward one day when the
+          // entered time is numerically before T/O (e.g. Land 0200, T/O 2300).
+          const landRaw   = parseTime(landTime, inputTimezone, timezone, toLocal);
+          const landLocal = resolveTime(landTime, inputTimezone, timezone, toLocal, 'after');
+          if (landRaw && landLocal && landRaw < toLocal) {
             warnings.push({ text: 'Land time interpreted as next day', severity: 'caution' });
           }
           if (landLocal) {
@@ -1041,7 +1058,7 @@
     });
 
     // ============================================================
-    // 13. Alert event (v1.4.4)
+    // 13. Alert event (v1.5.1)
     // ============================================================
 
     test('[Alert Event] Alert appears in LFA mode with LFA-only input', () => {
@@ -1083,7 +1100,7 @@
     });
 
     // ============================================================
-    // 14. Warning severity levels (v1.4.4)
+    // 14. Warning severity levels (v1.5.1)
     // ============================================================
 
     test('[Severity] Brief window violation has caution severity', () => {
@@ -1427,6 +1444,131 @@
       assertTrue(result.warnings.length >= 2, 'Should have at least 2 warnings');
       assertWarningContains(result.warnings, 'Alert to T/O less than', 'Tight alert warning present');
       assertWarningContains(result.warnings, 'Brief falls', 'Brief window warning present');
+    });
+
+    // ============================================================
+    // 16. LFA day-prior resolution (v1.5.1)
+    //
+    // When LFA is numerically greater than T/O (e.g. LFA 2200, T/O 0500)
+    // both times are entered without an explicit date, so the app must
+    // infer that LFA is on the calendar day before T/O.
+    // ============================================================
+
+    test('[LFA Day-Prior] LFA 2200 T/O 0500 Summer — prior day, no warning', () => {
+      // Standard overnight mission. LFA is night before, T/O is early morning.
+      // Alert = 0500 - 4:15 = 0045; 0045 (next day) > 2200 (prior day) → no tight warning.
+      const result = calculate({
+        ...BASE, alertType: 'LFA', season: 'Summer', formationType: 'Single Ship',
+        crewType: 'Basic Crew', lfaTime: '2200', takeoffTime: '0500', landTime: ''
+      });
+      assertNotNull(result, 'result');
+      assertNoWarnings(result.warnings, 'No tight-interval warning');
+      assertClose(findEvent(result.results, 'LFA'),   '2200', 'LFA HHMM');
+      assertClose(findEvent(result.results, 'Alert'), '0045', 'Alert = T/O - 4:15');
+      assertClose(findEvent(result.results, 'Show'),  '0145', 'Show = T/O - 3:15');
+      assertClose(findEvent(result.results, 'T/O'),   '0500', 'T/O');
+      // LFA must be chronologically before T/O
+      const lfa = findEvent(result.results, 'LFA');
+      const to  = findEvent(result.results, 'T/O');
+      assertTrue(lfa < to, 'LFA DateTime is before T/O DateTime');
+    });
+
+    test('[LFA Day-Prior] LFA 2200 T/O 0500 Winter — prior day, no warning', () => {
+      // Winter interval is 4:45. Alert = 0500 - 4:45 = 0015; 0015 > 2200 prev day → no warn.
+      const result = calculate({
+        ...BASE, alertType: 'LFA', season: 'Winter', formationType: 'Single Ship',
+        crewType: 'Basic Crew', lfaTime: '2200', takeoffTime: '0500', landTime: ''
+      });
+      assertNoWarnings(result.warnings, 'No tight-interval warning (Winter)');
+      assertClose(findEvent(result.results, 'Alert'), '0015', 'Alert = T/O - 4:45');
+      const lfa = findEvent(result.results, 'LFA');
+      const to  = findEvent(result.results, 'T/O');
+      assertTrue(lfa < to, 'LFA before T/O');
+    });
+
+    test('[LFA Day-Prior] LFA 2300 T/O 0100 Summer — prior day, tight warning fires', () => {
+      // Interval between LFA (2300 prev day) and T/O (0100) is only 2 hours.
+      // Alert = 0100 - 4:15 = 2045 (prev day); 2045 < 2300 → tight warning.
+      const result = calculate({
+        ...BASE, alertType: 'LFA', season: 'Summer', formationType: 'Single Ship',
+        crewType: 'Basic Crew', lfaTime: '2300', takeoffTime: '0100', landTime: ''
+      });
+      assertWarningContains(result.warnings, 'Alert to T/O less than', 'Tight-interval warning fires');
+      assertEqual(result.warnings.find(w => w.text.includes('Alert to T/O')).severity, 'error', 'Severity is error');
+      assertClose(findEvent(result.results, 'LFA'),   '2300', 'LFA HHMM');
+      assertClose(findEvent(result.results, 'T/O'),   '0100', 'T/O HHMM');
+      const lfa = findEvent(result.results, 'LFA');
+      const to  = findEvent(result.results, 'T/O');
+      assertTrue(lfa < to, 'LFA is still before T/O despite tight interval');
+    });
+
+    test('[LFA Day-Prior] LFA 2359 T/O 0001 Summer — tightest case, tight warning fires', () => {
+      // Two-minute gap is far under required 4:15.
+      const result = calculate({
+        ...BASE, alertType: 'LFA', season: 'Summer', formationType: 'Single Ship',
+        crewType: 'Basic Crew', lfaTime: '2359', takeoffTime: '0001', landTime: ''
+      });
+      assertWarningContains(result.warnings, 'Alert to T/O less than', 'Tight warning for 2-min gap');
+      const lfa = findEvent(result.results, 'LFA');
+      const to  = findEvent(result.results, 'T/O');
+      assertTrue(lfa < to, 'LFA before T/O');
+    });
+
+    test('[LFA Day-Prior] LFA same day before T/O numerically — no adjustment', () => {
+      // LFA 0500, T/O 0915: 0500 < 0915, resolveTime makes no change.
+      const result = calculate({
+        ...BASE, alertType: 'LFA', season: 'Summer', formationType: 'Single Ship',
+        crewType: 'Basic Crew', lfaTime: '0500', takeoffTime: '0915', landTime: ''
+      });
+      assertNoWarnings(result.warnings, 'No warning');
+      const lfa = findEvent(result.results, 'LFA');
+      const to  = findEvent(result.results, 'T/O');
+      assertEqual(lfa.day, to.day, 'LFA and T/O on same calendar day');
+    });
+
+    test('[LFA Day-Prior] LFA equals T/O numerically — same day, tight warning fires', () => {
+      // LFA 0600, T/O 0600: 0600 > 0600 is false → no day adjustment.
+      // Alert = 0600 - 4:15 = 0145 < LFA 0600 → tight warning.
+      const result = calculate({
+        ...BASE, alertType: 'LFA', season: 'Summer', formationType: 'Single Ship',
+        crewType: 'Basic Crew', lfaTime: '0600', takeoffTime: '0600', landTime: ''
+      });
+      assertWarningContains(result.warnings, 'Alert to T/O less than', 'Tight when LFA==T/O');
+      const lfa = findEvent(result.results, 'LFA');
+      const to  = findEvent(result.results, 'T/O');
+      assertEqual(lfa.day, to.day, 'No day adjustment when LFA == T/O numerically');
+    });
+
+    test('[LFA Day-Prior] Zulu input: LFA 2200Z T/O 0500Z — correct Zulu values', () => {
+      const result = calculate({
+        timezone: 'UTC', inputTimezone: 'Z',
+        alertType: 'LFA', season: 'Summer', formationType: 'Single Ship',
+        crewType: 'Basic Crew', lfaTime: '2200', takeoffTime: '0500', landTime: ''
+      });
+      assertNoWarnings(result.warnings, 'No tight warning');
+      const lfa = findEvent(result.results, 'LFA');
+      const to  = findEvent(result.results, 'T/O');
+      assertEqual(lfa.toUTC().hour, 22, 'LFA is 2200Z');
+      assertEqual(to.toUTC().hour,   5, 'T/O is 0500Z');
+      assertTrue(lfa < to, 'LFA before T/O');
+    });
+
+    test('[LFA Day-Prior] FDP computed correctly for overnight LFA', () => {
+      // LFA 2200 (prev day), T/O 0500. FDP start = LFA+1hr = 2300; FDP end = 2300+16hr = 1500.
+      const result = calculate({
+        ...BASE, alertType: 'LFA', season: 'Summer', formationType: 'Single Ship',
+        crewType: 'Basic Crew', lfaTime: '2200', takeoffTime: '0500', landTime: ''
+      });
+      assertClose(findEvent(result.results, 'FDP End'), '1500', 'FDP End = LFA+1hr+16hr');
+    });
+
+    test('[LFA Day-Prior] Crew rest computed correctly for overnight LFA', () => {
+      // LFA 2200 (prev day). FDP start = 2300 (prev day). Crew rest = 2300-12hr = 1100 (two days prior).
+      const result = calculate({
+        ...BASE, alertType: 'LFA', season: 'Summer', formationType: 'Single Ship',
+        crewType: 'Basic Crew', lfaTime: '2200', takeoffTime: '0500', landTime: ''
+      });
+      assertClose(findEvent(result.results, 'Crew Rest'), '1100', 'Crew Rest = FDP start - 12hr');
     });
 
     // ============================================================
