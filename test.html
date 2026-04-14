@@ -104,6 +104,7 @@
 
       let lfaLocal = null;
       let toLocal = null;
+      let duration = null;
 
       // Parse T/O first — it is the master anchor for all other times.
       if (takeoffTime) {
@@ -209,6 +210,7 @@
           }
           if (landLocal) {
             results.push({ event: 'Land', local: landLocal });
+            duration = formatDuration(landLocal.diff(toLocal, 'minutes').minutes);
           }
         }
 
@@ -234,7 +236,7 @@
       }
 
       results.sort((a, b) => a.local.toMillis() - b.local.toMillis());
-      return { results, warnings };
+      return { results, warnings, duration };
     }
 
     // ============================================================
@@ -1447,7 +1449,114 @@
     });
 
     // ============================================================
-    // 16. LFA day-prior resolution (v1.5.1)
+    // 16. Duration (Dur) — formatDuration unit tests and calculation
+    // ============================================================
+
+    test('[Dur] formatDuration — zero minutes', () => {
+      assertEqual(formatDuration(0), '0+00', '0 min');
+    });
+
+    test('[Dur] formatDuration — single-digit minutes get leading zero', () => {
+      assertEqual(formatDuration(5),  '0+05', '5 min');
+      assertEqual(formatDuration(65), '1+05', '65 min');
+    });
+
+    test('[Dur] formatDuration — exact hours', () => {
+      assertEqual(formatDuration(60),   '1+00', '1 hr');
+      assertEqual(formatDuration(120),  '2+00', '2 hr');
+      assertEqual(formatDuration(1440), '24+00', '24 hr');
+    });
+
+    test('[Dur] formatDuration — common interval values', () => {
+      assertEqual(formatDuration(255), '4+15', 'LFA-TO Summer');
+      assertEqual(formatDuration(285), '4+45', 'LFA-TO Winter');
+      assertEqual(formatDuration(195), '3+15', 'Show-TO Summer');
+      assertEqual(formatDuration(165), '2+45', 'old brief reference');
+    });
+
+    test('[Dur] formatDuration — negative input uses absolute value', () => {
+      assertEqual(formatDuration(-90),  '1+30', '-90 min');
+      assertEqual(formatDuration(-255), '4+15', '-255 min');
+    });
+
+    test('[Dur] Same-day land — duration computed correctly', () => {
+      const result = calculate({
+        ...BASE, alertType: 'Self Alert', season: 'Summer', formationType: 'Single Ship',
+        crewType: 'Basic Crew', takeoffTime: '0900', landTime: '1130', lfaTime: ''
+      });
+      assertEqual(result.duration, '2+30', 'T/O 0900 → Land 1130 = 2+30');
+    });
+
+    test('[Dur] Long same-day flight', () => {
+      const result = calculate({
+        ...BASE, alertType: 'Self Alert', season: 'Summer', formationType: 'Single Ship',
+        crewType: 'Basic Crew', takeoffTime: '1000', landTime: '1800', lfaTime: ''
+      });
+      assertEqual(result.duration, '8+00', 'T/O 1000 → Land 1800 = 8+00');
+    });
+
+    test('[Dur] Short flight under 1 hour', () => {
+      const result = calculate({
+        ...BASE, alertType: 'Self Alert', season: 'Summer', formationType: 'Single Ship',
+        crewType: 'Basic Crew', takeoffTime: '1000', landTime: '1045', lfaTime: ''
+      });
+      assertEqual(result.duration, '0+45', 'T/O 1000 → Land 1045 = 0+45');
+    });
+
+    test('[Dur] Zero duration — Land equals T/O', () => {
+      const result = calculate({
+        ...BASE, alertType: 'Self Alert', season: 'Summer', formationType: 'Single Ship',
+        crewType: 'Basic Crew', takeoffTime: '1000', landTime: '1000', lfaTime: ''
+      });
+      assertEqual(result.duration, '0+00', 'T/O == Land = 0+00');
+    });
+
+    test('[Dur] Next-day land — duration spans midnight', () => {
+      // T/O 2200, Land 0200 next day = 4 hours
+      const result = calculate({
+        ...BASE, alertType: 'Self Alert', season: 'Summer', formationType: 'Single Ship',
+        crewType: 'Basic Crew', takeoffTime: '2200', landTime: '0200', lfaTime: ''
+      });
+      assertEqual(result.duration, '4+00', 'Overnight flight 2200→0200 = 4+00');
+    });
+
+    test('[Dur] No land time — duration is null', () => {
+      const result = calculate({
+        ...BASE, alertType: 'Self Alert', season: 'Summer', formationType: 'Single Ship',
+        crewType: 'Basic Crew', takeoffTime: '1000', landTime: '', lfaTime: ''
+      });
+      assertNull(result.duration, 'No land → duration null');
+    });
+
+    test('[Dur] LFA mode with land time — duration computed from T/O', () => {
+      // Duration is always T/O→Land regardless of alert type
+      const result = calculate({
+        ...BASE, alertType: 'LFA', season: 'Summer', formationType: 'Single Ship',
+        crewType: 'Basic Crew', lfaTime: '0500', takeoffTime: '0915', landTime: '1430'
+      });
+      assertEqual(result.duration, '5+15', 'T/O 0915 → Land 1430 = 5+15');
+    });
+
+    test('[Dur] Overnight LFA mission — duration spans midnight', () => {
+      // T/O 0500, Land 0930 = 4+30
+      const result = calculate({
+        ...BASE, alertType: 'LFA', season: 'Summer', formationType: 'Single Ship',
+        crewType: 'Basic Crew', lfaTime: '2200', takeoffTime: '0500', landTime: '0930'
+      });
+      assertEqual(result.duration, '4+30', 'T/O 0500 → Land 0930 = 4+30');
+    });
+
+    test('[Dur] Zulu input — duration computed in flight minutes regardless of local tz', () => {
+      const result = calculate({
+        timezone: 'America/New_York', inputTimezone: 'Z',
+        alertType: 'Self Alert', season: 'Summer', formationType: 'Single Ship',
+        crewType: 'Basic Crew', takeoffTime: '1500', landTime: '1730', lfaTime: ''
+      });
+      assertEqual(result.duration, '2+30', 'Zulu T/O 1500Z → Land 1730Z = 2+30');
+    });
+
+    // ============================================================
+    // 17. LFA day-prior resolution (v1.5.1)
     //
     // When LFA is numerically greater than T/O (e.g. LFA 2200, T/O 0500)
     // both times are entered without an explicit date, so the app must
