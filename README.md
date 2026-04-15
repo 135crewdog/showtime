@@ -18,7 +18,7 @@ Installable as a PWA on iOS and Android. Works offline after first load.
 - **Local/Zulu input** — enter times in either timezone; all output shows both
 - **Sortie duration** — enter a landing time to add a Dur row showing flight time as HH+MM
 - **Output options** — toggle individual events on/off before copying
-- **Copy Table** — copies a markdown table (Event / Local / Zulu) ready to paste into chat
+- **Copy Table** — copies a markdown table (Event / Local / Zulu) ready to paste into P1 ChatOps
 - **Copy Plain Text** — copies a space-separated text block for platforms without markdown
 - **Light / Dark / Auto theme**
 - **Offline support** via service worker
