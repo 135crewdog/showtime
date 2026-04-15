@@ -16,9 +16,10 @@ Installable as a PWA on iOS and Android. Works offline after first load.
 - **Basic and Augmented crew** — drives the FDP limit (16 or 24 hours)
 - **Configurable crew brief** — set offset in 5-min increments (15–90 min) relative to Show or Step
 - **Local/Zulu input** — enter times in either timezone; all output shows both
-- **Day indicators** — events that fall on a different day from T/O are labeled (+1) or (−1)
+- **Sortie duration** — enter a landing time to add a Dur row showing flight time as HH+MM
 - **Output options** — toggle individual events on/off before copying
-- **Copy to clipboard** — one tap produces a plain-text timing message ready to paste
+- **Copy Table** — copies a markdown table (Event / Local / Zulu) ready to paste into P1 ChatOps
+- **Copy Plain Text** — copies a space-separated text block for platforms without markdown
 - **Light / Dark / Auto theme**
 - **Offline support** via service worker
 
