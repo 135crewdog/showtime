@@ -56,6 +56,17 @@ This is an unofficial tool. Always verify results against official publications 
 
 ---
 
+## Quality Roadmap
+
+A full audit is available at `docs/AUDIT.md`. The recommended strategy is a single modernization track:
+
+1. Extract the mission timing engine into one shared module used by both app and tests.
+2. Introduce design tokens + reusable UI primitives for consistent HIG-aligned styling.
+3. Add accessibility baseline improvements (focus states, live regions, semantic grouping).
+4. Keep PWA paths deployment-agnostic for portability.
+
+---
+
 ## Tech
 
 Single-file PWA — no build step, no dependencies to install. Served as static files.
