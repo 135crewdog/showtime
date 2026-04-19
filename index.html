@@ -78,39 +78,72 @@
       return h + '+' + String(m).padStart(2, '0');
     };
 
+    const APP_VERSION = '1.5.5';
+
+    const REGS = {
+      crewRestHours: 12,          // AFMAN 11-202V3 para 3.1
+      fdpLfaBufferHours: 1,       // AFMAN 11-202V3_AMCSUP para 3.2.1
+      fdpBasicHours: 16,          // AFMAN 11-202V3_AMCSUP Table 3.1
+      fdpAugmentedHours: 24,      // AFMAN 11-202V3_AMCSUP Table 3.1
+      checkInBeforeStartMin: 5,
+      intervals: {
+        Summer: {
+          lfaToTO:        { hours: 4, minutes: 15 },
+          showToTO:       { hours: 3, minutes: 15 },
+          stepSingleToTO: { hours: 1, minutes: 45 },
+          stepFormToTO:   { hours: 2, minutes:  0 },
+          startToTO:      { hours: 0, minutes: 25 }
+        },
+        Winter: {
+          lfaToTO:        { hours: 4, minutes: 45 },
+          showToTO:       { hours: 3, minutes: 45 },
+          stepSingleToTO: { hours: 2, minutes:  0 },
+          stepFormToTO:   { hours: 2, minutes:  0 },
+          startToTO:      { hours: 0, minutes: 30 }
+        }
+      }
+    };
+
     const ShowTime = () => {
-      const [alertType, setAlertType] = useState('LFA');
-      const [season, setSeason] = useState(() => {
+      const savedConfig = (() => {
+        try { return JSON.parse(localStorage.getItem('showtime-config') || '{}'); } catch { return {}; }
+      })();
+
+      const [alertType, setAlertType] = useState(savedConfig.alertType || 'LFA');
+      const [season, setSeason] = useState(savedConfig.season || (() => {
         const month = new Date().getMonth();
         return (month >= 3 && month <= 9) ? 'Summer' : 'Winter';
-      });
-      const [formationType, setFormationType] = useState('Single Ship');
-      const [crewType, setCrewType] = useState('Basic Crew');
-      const [briefMinutes, setBriefMinutes] = useState(30);
-      const [briefReference, setBriefReference] = useState('After Show');
-      const [timezone, setTimezone] = useState(Intl.DateTimeFormat().resolvedOptions().timeZone);
-      const [inputTimezone, setInputTimezone] = useState('L');
-      const [theme, setTheme] = useState('Auto');
+      })());
+      const [formationType, setFormationType] = useState(savedConfig.formationType || 'Single Ship');
+      const [crewType, setCrewType] = useState(savedConfig.crewType || 'Basic Crew');
+      const [briefMinutes, setBriefMinutes] = useState(savedConfig.briefMinutes || 30);
+      const [briefReference, setBriefReference] = useState(savedConfig.briefReference || 'After Show');
+      const [timezone, setTimezone] = useState(savedConfig.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone);
+      const [inputTimezone, setInputTimezone] = useState(savedConfig.inputTimezone || 'L');
+      const [theme, setTheme] = useState(savedConfig.theme || 'Auto');
 
       const [takeoffTime, setTakeoffTime] = useState('');
       const [landTime, setLandTime] = useState('');
       const [lfaTime, setLfaTime] = useState('');
 
-      const [showCrewRest, setShowCrewRest] = useState(true);
-      const [showLFA, setShowLFA] = useState(true);
-      const [showAlert, setShowAlert] = useState(true);
-      const [showCheckIn, setShowCheckIn] = useState(true);
-      const [showShow, setShowShow] = useState(true);
-      const [showBrief, setShowBrief] = useState(true);
-      const [showStep, setShowStep] = useState(true);
-      const [showStart, setShowStart] = useState(true);
-      const [showTakeoff, setShowTakeoff] = useState(true);
-      const [showLand, setShowLand] = useState(true);
-      const [showFDP, setShowFDP] = useState(false);
-      const [showDur, setShowDur] = useState(false);
+      const [visibleEvents, setVisibleEvents] = useState({
+        'Crew Rest': true,
+        'LFA': true,
+        'Alert': true,
+        'Check In': false,
+        'Show': true,
+        'Brief': true,
+        'Step': true,
+        'Start': true,
+        'T/O': true,
+        'Land': false,
+        'FDP End': false,
+        'Dur': false
+      });
 
       const [copySuccess, setCopySuccess] = useState(false);
       const [copyMdSuccess, setCopyMdSuccess] = useState(false);
+      const [clipboardError, setClipboardError] = useState(null);
       const [currentTab, setCurrentTab] = useState(0);
       const [showSettings, setShowSettings] = useState(false);
       const tabRefs = useRef([React.createRef(), React.createRef(), React.createRef()]);
@@ -131,32 +164,33 @@
       }, []);
 
       useEffect(() => {
+        try {
+          localStorage.setItem('showtime-config', JSON.stringify({
+            alertType, season, formationType, crewType,
+            briefMinutes, briefReference, timezone, inputTimezone, theme
+          }));
+        } catch {}
+      }, [alertType, season, formationType, crewType, briefMinutes, briefReference, timezone, inputTimezone, theme]);
+
+      useEffect(() => {
         if (alertType === 'LFA' && lfaTime && !takeoffTime) {
-          setShowCrewRest(true);
-          setShowLFA(true);
-          setShowAlert(true);
-          setShowCheckIn(false);
-          setShowShow(true);
-          setShowBrief(true);
-          setShowStep(true);
-          setShowStart(true);
-          setShowTakeoff(true);
-          setShowLand(false);
-          setShowFDP(false);
-          setShowDur(false);
+          setVisibleEvents({
+            'Crew Rest': true, 'LFA': true, 'Alert': true,
+            'Check In': false, 'Show': true, 'Brief': true,
+            'Step': true, 'Start': true, 'T/O': true,
+            'Land': false, 'FDP End': false, 'Dur': false
+          });
         } else if (takeoffTime) {
-          setShowCrewRest(true);
-          setShowLFA(alertType === 'LFA');
-          setShowAlert(alertType === 'LFA');
-          setShowCheckIn(formationType === 'Formation');
-          setShowShow(true);
-          setShowBrief(true);
-          setShowStep(true);
-          setShowStart(true);
-          setShowTakeoff(true);
-          setShowLand(!!landTime);
-          setShowFDP(false);
-          setShowDur(!!landTime);
+          setVisibleEvents({
+            'Crew Rest': true,
+            'LFA': alertType === 'LFA',
+            'Alert': alertType === 'LFA',
+            'Check In': formationType === 'Formation',
+            'Show': true, 'Brief': true, 'Step': true, 'Start': true, 'T/O': true,
+            'Land': !!landTime,
+            'FDP End': false,
+            'Dur': !!landTime
+          });
         }
       }, [lfaTime, takeoffTime, landTime, alertType, formationType]);
 
@@ -179,7 +213,12 @@
         destructive: '#ff453a',
         success: '#34c759',
         fill: '#48484a',
-        fillSecondary: '#3a3a3c'
+        fillSecondary: '#3a3a3c',
+        warning: '#ffd60a',
+        warningBg: '#3d2e00',
+        warningBorder: 'rgba(255,214,10,0.4)',
+        warningErrorBg: '#2d0a08',
+        warningErrorBorder: 'rgba(255,69,58,0.4)'
       } : {
         bg: '#f2f2f7',
         bgElevated: '#ffffff',
@@ -192,7 +231,12 @@
         destructive: '#ff3b30',
         success: '#34c759',
         fill: '#e5e5ea',
-        fillSecondary: '#d1d1d6'
+        fillSecondary: '#d1d1d6',
+        warning: '#8a6400',
+        warningBg: '#fff9e6',
+        warningBorder: 'rgba(255,204,0,0.5)',
+        warningErrorBg: '#fff0ef',
+        warningErrorBorder: 'rgba(255,59,48,0.35)'
       }, [activeTheme]);
 
       const timezones = [
@@ -305,14 +349,12 @@
       }, [parseTime, inputTimezone, timezone]);
 
       const getIntervals = useCallback(() => {
-        const isSummer = season === 'Summer';
-        const isSingleShip = formationType === 'Single Ship';
-
+        const s = REGS.intervals[season];
         return {
-          lfaToTO: isSummer ? { hours: 4, minutes: 15 } : { hours: 4, minutes: 45 },
-          showToTO: isSummer ? { hours: 3, minutes: 15 } : { hours: 3, minutes: 45 },
-          stepToTO: isSingleShip && isSummer ? { hours: 1, minutes: 45 } : { hours: 2, minutes: 0 },
-          startToTO: isSummer ? { hours: 0, minutes: 25 } : { hours: 0, minutes: 30 }
+          lfaToTO:  s.lfaToTO,
+          showToTO: s.showToTO,
+          stepToTO: formationType === 'Single Ship' ? s.stepSingleToTO : s.stepFormToTO,
+          startToTO: s.startToTO
         };
       }, [season, formationType]);
 
@@ -382,29 +424,29 @@
           // FDP starts at alert+1hr (LFA missions) or show (self-alert)
           let crewRestLocal;
           if (alertType === 'LFA' && effectiveAlertLocal) {
-            crewRestLocal = effectiveAlertLocal.plus({ hours: 1 }).minus({ hours: 12 });
+            crewRestLocal = effectiveAlertLocal.plus({ hours: REGS.fdpLfaBufferHours }).minus({ hours: REGS.crewRestHours });
           } else if (toLocal) {
             const showLocal = toLocal.minus(intervals.showToTO);
-            crewRestLocal = showLocal.minus({ hours: 12 });
+            crewRestLocal = showLocal.minus({ hours: REGS.crewRestHours });
           }
 
           if (crewRestLocal) {
-            results.push({ event: 'Crew Rest', local: crewRestLocal, show: showCrewRest });
+            results.push({ event: 'Crew Rest', local: crewRestLocal });
           }
 
           if (alertType === 'LFA' && lfaLocal) {
-            results.push({ event: 'LFA', local: lfaLocal, show: showLFA });
+            results.push({ event: 'LFA', local: lfaLocal });
           }
 
           if (alertType === 'LFA' && alertLocal) {
-            results.push({ event: 'Alert', local: alertLocal, show: showAlert });
+            results.push({ event: 'Alert', local: alertLocal });
           }
 
           if (toLocal) {
             const showLocal = toLocal.minus(intervals.showToTO);
             const stepLocal = toLocal.minus(intervals.stepToTO);
             const startLocal = toLocal.minus(intervals.startToTO);
-            const checkInLocal = formationType === 'Formation' ? startLocal.minus({ minutes: 5 }) : null;
+            const checkInLocal = formationType === 'Formation' ? startLocal.minus({ minutes: REGS.checkInBeforeStartMin }) : null;
 
             // Compute brief time from user-configured offset
             const showMinToTO = intervals.showToTO.hours * 60 + intervals.showToTO.minutes;
@@ -420,15 +462,15 @@
             const briefLocal = toLocal.minus({ minutes: briefMinToTO });
 
             if (formationType === 'Formation' && checkInLocal) {
-              results.push({ event: 'Check In', local: checkInLocal, show: showCheckIn });
+              results.push({ event: 'Check In', local: checkInLocal });
             }
 
             results.push(
-              { event: 'Show', local: showLocal, show: showShow },
-              { event: 'Brief', local: briefLocal, show: showBrief },
-              { event: 'Step', local: stepLocal, show: showStep },
-              { event: 'Start', local: startLocal, show: showStart },
-              { event: 'T/O', local: toLocal, show: showTakeoff }
+              { event: 'Show', local: showLocal },
+              { event: 'Brief', local: briefLocal },
+              { event: 'Step', local: stepLocal },
+              { event: 'Start', local: startLocal },
+              { event: 'T/O', local: toLocal }
             );
 
             if (landTime) {
@@ -440,21 +482,21 @@
                 warnings.push({ text: 'Land time interpreted as next day', severity: 'caution' });
               }
               if (landLocal) {
-                results.push({ event: 'Land', local: landLocal, show: showLand });
+                results.push({ event: 'Land', local: landLocal });
                 duration = formatDuration(landLocal.diff(toLocal, 'minutes').minutes);
               }
             }
 
             // FDP: starts 1hr after alert notification (LFA missions) or at show (self-alert)
-            const fdpHours = crewType === 'Basic Crew' ? 16 : 24;
+            const fdpHours = crewType === 'Basic Crew' ? REGS.fdpBasicHours : REGS.fdpAugmentedHours;
             let fdpStartLocal;
             if (alertType === 'LFA' && effectiveAlertLocal) {
-              fdpStartLocal = effectiveAlertLocal.plus({ hours: 1 });
+              fdpStartLocal = effectiveAlertLocal.plus({ hours: REGS.fdpLfaBufferHours });
             } else {
               fdpStartLocal = showLocal;
             }
             const fdpEndLocal = fdpStartLocal.plus({ hours: fdpHours });
-            results.push({ event: 'FDP End', local: fdpEndLocal, show: showFDP });
+            results.push({ event: 'FDP End', local: fdpEndLocal });
           }
 
           // Mark rows that fall before LFA as out-of-order (tight Case C only)
@@ -473,8 +515,7 @@
           console.error('Calculation error:', err);
           return null;
         }
-      }, [alertType, season, formationType, crewType, briefMinutes, briefReference, parseTime, resolveTime, getIntervals, takeoffTime, landTime, lfaTime,
-          showCrewRest, showLFA, showAlert, showCheckIn, showShow, showBrief, showStep, showStart, showTakeoff, showLand, showFDP]);
+      }, [alertType, season, formationType, crewType, briefMinutes, briefReference, parseTime, resolveTime, getIntervals, takeoffTime, landTime, lfaTime]);
 
       const results = computed ? computed.results : null;
       const warnings = computed ? computed.warnings : [];
@@ -493,11 +534,11 @@
         if (!results) return 'Invalid inputs';
 
         const lines = results
-          .filter(r => r.show)
+          .filter(r => visibleEvents[r.event])
           .map(r => r.event + ' ' + formatTime(r.local));
-        if (duration && showDur) lines.push('Dur ' + duration);
+        if (duration && visibleEvents['Dur']) lines.push('Dur ' + duration);
         return lines.join('\n');
-      }, [results, formatTime, duration, showDur]);
+      }, [results, formatTime, duration, visibleEvents]);
 
       const copyToClipboard = useCallback(async () => {
         try {
@@ -506,18 +547,19 @@
           setTimeout(() => setCopySuccess(false), 2000);
         } catch (err) {
           console.error('Clipboard error:', err);
-          alert('Could not copy to clipboard. Please check permissions.');
+          setClipboardError('Could not copy to clipboard. Check browser permissions.');
+          setTimeout(() => setClipboardError(null), 4000);
         }
       }, [outputText]);
 
       const outputMarkdown = useMemo(() => {
         if (!results) return '';
         const rows = results
-          .filter(r => r.show)
+          .filter(r => visibleEvents[r.event])
           .map(r => `| ${r.event} | ${r.local.toFormat('HHmm')}L | ${r.local.toUTC().toFormat('HHmm')}Z |`);
-        if (duration && showDur) rows.push(`| Dur | ${duration} |  |`);
+        if (duration && visibleEvents['Dur']) rows.push(`| Dur | ${duration} |  |`);
         return ['| Event | Local | Zulu |', '| --- | --- | --- |', ...rows].join('\n');
-      }, [results, duration, showDur]);
+      }, [results, duration, visibleEvents]);
 
       const copyToClipboardMd = useCallback(async () => {
         if (!outputMarkdown) return;
@@ -527,7 +569,8 @@
           setTimeout(() => setCopyMdSuccess(false), 2000);
         } catch (err) {
           console.error('Clipboard error:', err);
-          alert('Could not copy to clipboard. Please check permissions.');
+          setClipboardError('Could not copy to clipboard. Check browser permissions.');
+          setTimeout(() => setClipboardError(null), 4000);
         }
       }, [outputMarkdown]);
 
@@ -746,20 +789,20 @@
           marginTop: '4px'
         },
         warningBanner: {
-          background: activeTheme === 'dark' ? '#3d2e00' : '#fff9e6',
-          border: '1px solid ' + (activeTheme === 'dark' ? 'rgba(255,214,10,0.4)' : 'rgba(255,204,0,0.5)'),
+          background: colors.warningBg,
+          border: '1px solid ' + colors.warningBorder,
           borderRadius: '10px',
           padding: '12px 16px',
           marginBottom: '16px'
         },
         warningText: {
           fontSize: '13px',
-          color: activeTheme === 'dark' ? '#ffd60a' : '#8a6400',
+          color: colors.warning,
           fontWeight: '500'
         },
         warningBannerError: {
-          background: activeTheme === 'dark' ? '#2d0a08' : '#fff0ef',
-          border: '1px solid ' + (activeTheme === 'dark' ? 'rgba(255,69,58,0.4)' : 'rgba(255,59,48,0.35)'),
+          background: colors.warningErrorBg,
+          border: '1px solid ' + colors.warningErrorBorder,
           borderRadius: '10px',
           padding: '12px 16px',
           marginBottom: '16px'
@@ -769,7 +812,7 @@
           color: colors.destructive,
           fontWeight: '500'
         }
-      }), [colors, colorSchemeProp, activeTheme]);
+      }), [colors, colorSchemeProp]);
 
       const segmentBtn = useCallback((active) => ({
         flex: 1,
@@ -806,7 +849,7 @@
         height: '100%'
       }), [currentTab]);
 
-      const visibleResults = results ? results.filter(r => r.show) : null;
+      const visibleResults = results ? results.filter(r => visibleEvents[r.event]) : null;
 
       if (showSettings) {
         return html`
@@ -861,7 +904,7 @@
                   <a href="mailto:135crewdog.github@gmail.com?subject=Show%20Time%20App%20Feedback" style=${{display: 'block', textAlign: 'center', padding: '12px 16px', color: colors.accent, fontSize: '17px', fontWeight: '500', textDecoration: 'none'}}>Send Feedback</a>
                 </div>
               </div>
-              <div style=${{textAlign: 'center', marginTop: '32px', paddingBottom: '32px', fontSize: '13px', color: colors.textSecondary}}>Show Time v1.5.5</div>
+              <div style=${{textAlign: 'center', marginTop: '24px', paddingBottom: '32px', fontSize: '13px', color: colors.textSecondary}}>{'Show Time v' + APP_VERSION}</div>
             </div>
           </div>
         `;
@@ -917,7 +960,7 @@
                     </div>
                     <div style=${{...styles.settingRow, borderBottom: 'none', marginBottom: 0}}>
                       <label htmlFor="brief-minutes">Crew Brief</label>
-                      <div style=${{ display: 'flex', gap: '6px', alignItems: 'center' }}>
+                      <div style=${{ display: 'flex', gap: '8px', alignItems: 'center' }}>
                         <select id="brief-minutes" value=${briefMinutes} onChange=${(e) => setBriefMinutes(Number(e.target.value))} style=${styles.select}>
                           ${[15,20,25,30,35,40,45,50,55,60,65,70,75,80,85,90].map(m => html`<option key=${m} value=${m}>${m} min</option>`)}
                         </select>
@@ -932,7 +975,7 @@
                       <select id="timezone" value=${timezone} onChange=${(e) => setTimezone(e.target.value)} style=${styles.selectFull}>
                         ${timezones.map(tz => html`<option key=${tz} value=${tz}>${tz.replace(/_/g, ' ')}</option>`)}
                       </select>
-                      ${hasDSTTransitionToday && html`<div style=${{fontSize: '12px', color: activeTheme === 'dark' ? '#ffd60a' : '#8a6400', marginTop: '6px'}}>DST transition today — verify your Season setting.</div>`}
+                      ${hasDSTTransitionToday && html`<div style=${{fontSize: '12px', color: colors.warning, marginTop: '8px'}}>DST transition today — verify your Season setting.</div>`}
                     </div>
                   </div>
                 </div>
@@ -944,8 +987,8 @@
                   <div style=${styles.sectionTitle}>INPUT TIMEZONE</div>
                   <div style=${styles.sectionContent}>
                     <div style=${styles.toggleGroup}>
-                      <button onClick=${() => setInputTimezone('L')} style=${toggleBtn(inputTimezone === 'L')}>Local</button>
-                      <button onClick=${() => setInputTimezone('Z')} style=${toggleBtn(inputTimezone === 'Z')}>Zulu</button>
+                      <button aria-label="Set input timezone to Local" onClick=${() => setInputTimezone('L')} style=${toggleBtn(inputTimezone === 'L')}>Local</button>
+                      <button aria-label="Set input timezone to Zulu (UTC)" onClick=${() => setInputTimezone('Z')} style=${toggleBtn(inputTimezone === 'Z')}>Zulu</button>
                     </div>
                   </div>
                 </div>
@@ -955,19 +998,19 @@
                     ${alertType === 'LFA' && html`
                       <div style=${styles.inputGroup}>
                         <label htmlFor="input-lfa" style=${styles.inputLabel}>LFA</label>
-                        <input id="input-lfa" type="text" value=${lfaTime} onChange=${(e) => setLfaTime(sanitizeTimeInput(e.target.value))} placeholder=${'HHMM'} maxLength=${4} inputMode="numeric" style=${lfaError ? styles.inputError : styles.input} />
-                        ${lfaError && html`<div style=${styles.errorHint}>${lfaError}</div>`}
+                        <input id="input-lfa" aria-describedby=${lfaError ? 'lfa-error' : undefined} type="text" value=${lfaTime} onChange=${(e) => setLfaTime(sanitizeTimeInput(e.target.value))} placeholder=${'HHMM'} maxLength=${4} inputMode="numeric" style=${lfaError ? styles.inputError : styles.input} />
+                        ${lfaError && html`<div id="lfa-error" style=${styles.errorHint}>${lfaError}</div>`}
                       </div>
                     `}
                     <div style=${styles.inputGroup}>
                       <label htmlFor="input-takeoff" style=${styles.inputLabel}>Takeoff</label>
-                      <input id="input-takeoff" type="text" value=${takeoffTime} onChange=${(e) => setTakeoffTime(sanitizeTimeInput(e.target.value))} placeholder=${'HHMM'} maxLength=${4} inputMode="numeric" style=${takeoffError ? styles.inputError : styles.input} />
-                      ${takeoffError && html`<div style=${styles.errorHint}>${takeoffError}</div>`}
+                      <input id="input-takeoff" aria-describedby=${takeoffError ? 'takeoff-error' : undefined} type="text" value=${takeoffTime} onChange=${(e) => setTakeoffTime(sanitizeTimeInput(e.target.value))} placeholder=${'HHMM'} maxLength=${4} inputMode="numeric" style=${takeoffError ? styles.inputError : styles.input} />
+                      ${takeoffError && html`<div id="takeoff-error" style=${styles.errorHint}>${takeoffError}</div>`}
                     </div>
                     <div style=${styles.inputGroup}>
                       <label htmlFor="input-land" style=${styles.inputLabel}>Land</label>
-                      <input id="input-land" type="text" value=${landTime} onChange=${(e) => setLandTime(sanitizeTimeInput(e.target.value))} placeholder=${'HHMM'} maxLength=${4} inputMode="numeric" style=${landError ? styles.inputError : styles.input} />
-                      ${landError && html`<div style=${styles.errorHint}>${landError}</div>`}
+                      <input id="input-land" aria-describedby=${landError ? 'land-error' : undefined} type="text" value=${landTime} onChange=${(e) => setLandTime(sanitizeTimeInput(e.target.value))} placeholder=${'HHMM'} maxLength=${4} inputMode="numeric" style=${landError ? styles.inputError : styles.input} />
+                      ${landError && html`<div id="land-error" style=${styles.errorHint}>${landError}</div>`}
                     </div>
                   </div>
                 </div>
@@ -981,7 +1024,7 @@
                 ${warnings.length > 0 && html`
                   <div>
                     ${warnings.map((w, i) => html`
-                      <div key=${i} style=${w.severity === 'error' ? styles.warningBannerError : styles.warningBanner}>
+                      <div key=${i} role="alert" style=${w.severity === 'error' ? styles.warningBannerError : styles.warningBanner}>
                         <div style=${w.severity === 'error' ? styles.warningTextError : styles.warningText}>${w.text}</div>
                       </div>
                     `)}
@@ -989,26 +1032,26 @@
                 `}
                 <div style=${styles.section}>
                   <div style=${styles.sectionTitle}>CREW TIMING MESSAGE</div>
-                  <div style=${styles.sectionContent}>
+                  <div aria-live="polite" style=${styles.sectionContent}>
                     <div style=${styles.outputBox}>
                       ${visibleResults ? html`
                         <table style=${{width: '100%', borderCollapse: 'collapse'}}>
                           <thead>
                             <tr style=${{borderBottom: '1px solid ' + colors.border}}>
-                              <th style=${{textAlign: 'left', paddingBottom: '8px', color: colors.textSecondary, fontWeight: '400', fontSize: '12px', textTransform: 'uppercase', letterSpacing: '0.5px'}}>Event</th>
-                              <th style=${{textAlign: 'right', paddingBottom: '8px', color: colors.textSecondary, fontWeight: '400', fontSize: '12px', textTransform: 'uppercase', letterSpacing: '0.5px'}}>Local</th>
-                              <th style=${{textAlign: 'right', paddingBottom: '8px', color: colors.textSecondary, fontWeight: '400', fontSize: '12px', textTransform: 'uppercase', letterSpacing: '0.5px'}}>Zulu</th>
+                              <th scope="col" style=${{textAlign: 'left', paddingBottom: '8px', color: colors.textSecondary, fontWeight: '400', fontSize: '12px', textTransform: 'uppercase', letterSpacing: '0.5px'}}>Event</th>
+                              <th scope="col" style=${{textAlign: 'right', paddingBottom: '8px', color: colors.textSecondary, fontWeight: '400', fontSize: '12px', textTransform: 'uppercase', letterSpacing: '0.5px'}}>Local</th>
+                              <th scope="col" style=${{textAlign: 'right', paddingBottom: '8px', color: colors.textSecondary, fontWeight: '400', fontSize: '12px', textTransform: 'uppercase', letterSpacing: '0.5px'}}>Zulu</th>
                             </tr>
                           </thead>
                           <tbody>
                             ${visibleResults.map((r, i) => html`
-                              <tr key=${i} style=${{borderBottom: (i < visibleResults.length - 1 || (duration && showDur)) ? '1px solid ' + colors.border : 'none'}}>
+                              <tr key=${i} style=${{borderBottom: (i < visibleResults.length - 1 || (duration && visibleEvents['Dur'])) ? '1px solid ' + colors.border : 'none'}}>
                                 <td style=${{fontWeight: '600', color: r.outOfOrder ? colors.destructive : colors.text, paddingTop: '10px', paddingBottom: '10px'}}>${r.event}</td>
                                 <td style=${{textAlign: 'right', color: r.outOfOrder ? colors.destructive : colors.text, paddingTop: '10px', paddingBottom: '10px'}}>${r.local.toFormat('HHmm')}L</td>
                                 <td style=${{textAlign: 'right', color: r.outOfOrder ? colors.destructive : colors.text, paddingTop: '10px', paddingBottom: '10px'}}>${r.local.toUTC().toFormat('HHmm')}Z</td>
                               </tr>
                             `)}
-                            ${duration && showDur && html`
+                            ${duration && visibleEvents['Dur'] && html`
                               <tr key="dur">
                                 <td style=${{fontWeight: '600', color: colors.text, paddingTop: '10px', paddingBottom: '10px'}}>Dur</td>
                                 <td style=${{textAlign: 'right', color: colors.text, paddingTop: '10px', paddingBottom: '10px'}}>${duration}</td>
@@ -1031,24 +1074,32 @@
                         ${copySuccess ? '\u2713 Copied' : 'Copy Plain Text'}
                       </button>
                     </div>
+                    ${clipboardError && html`
+                      <div role="alert" style=${{...styles.warningBannerError, marginTop: '12px', marginBottom: 0}}>
+                        <div style=${styles.warningTextError}>${clipboardError}</div>
+                      </div>
+                    `}
                   </div>
                 </div>
                 <div style=${styles.section}>
                   <div style=${styles.sectionTitle}>OUTPUT OPTIONS</div>
                   <div style=${styles.sectionContent}>
                     <div style=${styles.checkboxGrid}>
-                      <label style=${styles.checkboxLabel}><input type="checkbox" checked=${showCrewRest} onChange=${(e) => setShowCrewRest(e.target.checked)} style=${styles.checkbox} />Crew Rest</label>
-                      ${alertType === 'LFA' && html`<label style=${styles.checkboxLabel}><input type="checkbox" checked=${showLFA} onChange=${(e) => setShowLFA(e.target.checked)} style=${styles.checkbox} />LFA</label>`}
-                      ${alertType === 'LFA' && html`<label style=${styles.checkboxLabel}><input type="checkbox" checked=${showAlert} onChange=${(e) => setShowAlert(e.target.checked)} style=${styles.checkbox} />Alert</label>`}
-                      <label style=${styles.checkboxLabel}><input type="checkbox" checked=${showShow} onChange=${(e) => setShowShow(e.target.checked)} style=${styles.checkbox} />Show</label>
-                      <label style=${styles.checkboxLabel}><input type="checkbox" checked=${showBrief} onChange=${(e) => setShowBrief(e.target.checked)} style=${styles.checkbox} />Brief</label>
-                      <label style=${styles.checkboxLabel}><input type="checkbox" checked=${showStep} onChange=${(e) => setShowStep(e.target.checked)} style=${styles.checkbox} />Step</label>
-                      ${formationType === 'Formation' && html`<label style=${styles.checkboxLabel}><input type="checkbox" checked=${showCheckIn} onChange=${(e) => setShowCheckIn(e.target.checked)} style=${styles.checkbox} />Check In</label>`}
-                      <label style=${styles.checkboxLabel}><input type="checkbox" checked=${showStart} onChange=${(e) => setShowStart(e.target.checked)} style=${styles.checkbox} />Start</label>
-                      <label style=${styles.checkboxLabel}><input type="checkbox" checked=${showTakeoff} onChange=${(e) => setShowTakeoff(e.target.checked)} style=${styles.checkbox} />T/O</label>
-                      <label style=${styles.checkboxLabel}><input type="checkbox" checked=${showLand} onChange=${(e) => setShowLand(e.target.checked)} style=${styles.checkbox} />Land</label>
-                      ${landTime && html`<label style=${styles.checkboxLabel}><input type="checkbox" checked=${showDur} onChange=${(e) => setShowDur(e.target.checked)} style=${styles.checkbox} />Dur</label>`}
-                      <label style=${styles.checkboxLabel}><input type="checkbox" checked=${showFDP} onChange=${(e) => setShowFDP(e.target.checked)} style=${styles.checkbox} />FDP End</label>
+                      ${[
+                        'Crew Rest',
+                        ...(alertType === 'LFA' ? ['LFA', 'Alert'] : []),
+                        ...(formationType === 'Formation' ? ['Check In'] : []),
+                        'Show', 'Brief', 'Step', 'Start', 'T/O', 'Land',
+                        ...(landTime ? ['Dur'] : []),
+                        'FDP End'
+                      ].map(name => html`
+                        <label key=${name} style=${styles.checkboxLabel}>
+                          <input type="checkbox"
+                            checked=${visibleEvents[name]}
+                            onChange=${(e) => setVisibleEvents(prev => ({...prev, [name]: e.target.checked}))}
+                            style=${styles.checkbox} />${name}
+                        </label>
+                      `)}
                     </div>
                   </div>
                 </div>
@@ -1069,7 +1120,7 @@
 
     // Register service worker for offline support
     if ('serviceWorker' in navigator) {
-      navigator.serviceWorker.register('sw.js').catch(() => {});
+      navigator.serviceWorker.register('sw.js').catch((err) => console.warn('Service worker registration failed:', err));
     }
   </script>
 </body>
