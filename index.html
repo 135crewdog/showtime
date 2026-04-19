@@ -65,18 +65,13 @@
   <div id="root"></div>
 
   <script type="module">
+    import { calculateMissionTimes } from './mission-timing.js';
+
     const { useState, useRef, useEffect, useMemo, useCallback } = React;
     const { DateTime } = luxon;
     const html = htm.bind(React.createElement);
 
     const sanitizeTimeInput = (val) => val.replace(/\D/g, '').slice(0, 4);
-
-    const formatDuration = (totalMin) => {
-      const abs = Math.abs(totalMin);
-      const h = Math.floor(abs / 60);
-      const m = abs % 60;
-      return h + '+' + String(m).padStart(2, '0');
-    };
 
     const ShowTime = () => {
       const [alertType, setAlertType] = useState('LFA');
@@ -259,63 +254,6 @@
       const takeoffError = useMemo(() => validateTime(takeoffTime), [takeoffTime, validateTime]);
       const landError = useMemo(() => validateTime(landTime), [landTime, validateTime]);
 
-      const parseTime = useCallback((timeStr, referenceDT = null) => {
-        if (!timeStr || timeStr.length !== 4) return null;
-        const hours = parseInt(timeStr.substring(0, 2), 10);
-        const minutes = parseInt(timeStr.substring(2, 4), 10);
-        if (isNaN(hours) || isNaN(minutes) || hours > 23 || minutes > 59) return null;
-
-        let dt;
-        if (inputTimezone === 'Z') {
-          const utcBase = referenceDT ? referenceDT.toUTC() : DateTime.utc();
-          dt = DateTime.utc(utcBase.year, utcBase.month, utcBase.day, hours, minutes).setZone(timezone);
-        } else {
-          const baseDate = referenceDT || DateTime.now().setZone(timezone);
-          dt = DateTime.fromObject(
-            { year: baseDate.year, month: baseDate.month, day: baseDate.day, hour: hours, minute: minutes },
-            { zone: timezone }
-          );
-        }
-
-        return dt;
-      }, [inputTimezone, timezone]);
-
-      // Resolve a user-entered time relative to a reference DateTime.
-      // direction 'before': if the parsed time falls after refDT (same calendar day),
-      //   step back one day — e.g. LFA 2200Z with T/O 0500Z next morning.
-      // direction 'after': if the parsed time falls before refDT (same calendar day),
-      //   step forward one day — e.g. Land 0200Z with T/O 2300Z.
-      // When refDT is null (only one time provided), no adjustment is possible.
-      const resolveTime = useCallback((timeStr, refDT, direction) => {
-        const dt = parseTime(timeStr, refDT);
-        if (!dt || !refDT) return dt;
-        // For Zulu input, roll the day in UTC to avoid DST offset shifts on
-        // transition boundaries; then re-express in the display zone.
-        if (direction === 'before' && dt > refDT) {
-          return inputTimezone === 'Z'
-            ? dt.toUTC().minus({ days: 1 }).setZone(timezone)
-            : dt.minus({ days: 1 });
-        }
-        if (direction === 'after'  && dt < refDT) {
-          return inputTimezone === 'Z'
-            ? dt.toUTC().plus({ days: 1 }).setZone(timezone)
-            : dt.plus({ days: 1 });
-        }
-        return dt;
-      }, [parseTime, inputTimezone, timezone]);
-
-      const getIntervals = useCallback(() => {
-        const isSummer = season === 'Summer';
-        const isSingleShip = formationType === 'Single Ship';
-
-        return {
-          lfaToTO: isSummer ? { hours: 4, minutes: 15 } : { hours: 4, minutes: 45 },
-          showToTO: isSummer ? { hours: 3, minutes: 15 } : { hours: 3, minutes: 45 },
-          stepToTO: isSingleShip && isSummer ? { hours: 1, minutes: 45 } : { hours: 2, minutes: 0 },
-          startToTO: isSummer ? { hours: 0, minutes: 25 } : { hours: 0, minutes: 30 }
-        };
-      }, [season, formationType]);
-
       const hasDSTTransitionToday = useMemo(() => {
         try {
           const start = DateTime.now().setZone(timezone).startOf('day');
@@ -324,157 +262,51 @@
         } catch { return false; }
       }, [timezone]);
 
+      const eventVisibility = useMemo(() => ({
+        'Crew Rest': showCrewRest,
+        LFA: showLFA,
+        Alert: showAlert,
+        'Check In': showCheckIn,
+        Show: showShow,
+        Brief: showBrief,
+        Step: showStep,
+        Start: showStart,
+        'T/O': showTakeoff,
+        Land: showLand,
+        'FDP End': showFDP
+      }), [showCrewRest, showLFA, showAlert, showCheckIn, showShow, showBrief, showStep, showStart, showTakeoff, showLand, showFDP]);
+
       const computed = useMemo(() => {
-        if (alertType === 'LFA' && !lfaTime && !takeoffTime) return null;
-        if (alertType === 'Self Alert' && !takeoffTime) return null;
-
         try {
-          const results = [];
-          const warnings = [];
-          const intervals = getIntervals();
+          const raw = calculateMissionTimes(DateTime, {
+            alertType,
+            season,
+            formationType,
+            crewType,
+            timezone,
+            inputTimezone,
+            takeoffTime,
+            landTime,
+            lfaTime,
+            briefMinutes,
+            briefReference
+          });
 
-          let lfaLocal = null;
-          let toLocal = null;
-          let duration = null;
+          if (!raw) return null;
 
-          // Parse T/O first — it is the master anchor for all other times.
-          if (takeoffTime) {
-            toLocal = parseTime(takeoffTime);
-            if (!toLocal) return null;
-          }
-
-          // LFA must occur before T/O. resolveTime steps back one day when the
-          // entered time is numerically after T/O (e.g. LFA 2200Z, T/O 0500Z).
-          if (lfaTime) {
-            lfaLocal = resolveTime(lfaTime, toLocal, 'before');
-            if (!lfaLocal) return null;
-          }
-
-          let alertLocal = null;
-
-          if (alertType === 'LFA') {
-            if (lfaLocal && toLocal) {
-              // Case C: both LFA and T/O provided — calculate Alert as T/O minus required interval
-              const calculatedAlert = toLocal.minus(intervals.lfaToTO);
-              alertLocal = calculatedAlert;
-              if (calculatedAlert < lfaLocal) {
-                const minRequired = formatDuration(intervals.lfaToTO.hours * 60 + intervals.lfaToTO.minutes);
-                warnings.push({ text: 'Alert to T/O less than ' + minRequired, severity: 'error' });
-              }
-            } else if (!lfaLocal && toLocal) {
-              // Case B: T/O only — LFA = Alert = T/O minus required interval
-              lfaLocal = toLocal.minus(intervals.lfaToTO);
-              alertLocal = lfaLocal;
-            } else if (lfaLocal && !toLocal) {
-              // Case A: LFA only — Alert = LFA, T/O = LFA plus required interval
-              toLocal = lfaLocal.plus(intervals.lfaToTO);
-              alertLocal = lfaLocal;
-            }
-          }
-
-          // Effective alert time: crew cannot be alerted before LFA.
-          // In Case C tight (calculatedAlert < LFA), the crew is alerted at LFA.
-          const effectiveAlertLocal = (alertLocal && lfaLocal && alertLocal < lfaLocal)
-            ? lfaLocal
-            : alertLocal;
-
-          // Crew rest: 12hr before FDP start
-          // FDP starts at alert+1hr (LFA missions) or show (self-alert)
-          let crewRestLocal;
-          if (alertType === 'LFA' && effectiveAlertLocal) {
-            crewRestLocal = effectiveAlertLocal.plus({ hours: 1 }).minus({ hours: 12 });
-          } else if (toLocal) {
-            const showLocal = toLocal.minus(intervals.showToTO);
-            crewRestLocal = showLocal.minus({ hours: 12 });
-          }
-
-          if (crewRestLocal) {
-            results.push({ event: 'Crew Rest', local: crewRestLocal, show: showCrewRest });
-          }
-
-          if (alertType === 'LFA' && lfaLocal) {
-            results.push({ event: 'LFA', local: lfaLocal, show: showLFA });
-          }
-
-          if (alertType === 'LFA' && alertLocal) {
-            results.push({ event: 'Alert', local: alertLocal, show: showAlert });
-          }
-
-          if (toLocal) {
-            const showLocal = toLocal.minus(intervals.showToTO);
-            const stepLocal = toLocal.minus(intervals.stepToTO);
-            const startLocal = toLocal.minus(intervals.startToTO);
-            const checkInLocal = formationType === 'Formation' ? startLocal.minus({ minutes: 5 }) : null;
-
-            // Compute brief time from user-configured offset
-            const showMinToTO = intervals.showToTO.hours * 60 + intervals.showToTO.minutes;
-            const stepMinToTO = intervals.stepToTO.hours * 60 + intervals.stepToTO.minutes;
-            const briefMinToTO = briefReference === 'After Show'
-              ? showMinToTO - briefMinutes
-              : stepMinToTO + briefMinutes;
-            if (briefMinToTO <= stepMinToTO) {
-              warnings.push({ text: 'Brief falls at or after Step — adjust Crew Brief in Setup', severity: 'caution' });
-            } else if (briefMinToTO >= showMinToTO) {
-              warnings.push({ text: 'Brief falls at or before Show — adjust Crew Brief in Setup', severity: 'caution' });
-            }
-            const briefLocal = toLocal.minus({ minutes: briefMinToTO });
-
-            if (formationType === 'Formation' && checkInLocal) {
-              results.push({ event: 'Check In', local: checkInLocal, show: showCheckIn });
-            }
-
-            results.push(
-              { event: 'Show', local: showLocal, show: showShow },
-              { event: 'Brief', local: briefLocal, show: showBrief },
-              { event: 'Step', local: stepLocal, show: showStep },
-              { event: 'Start', local: startLocal, show: showStart },
-              { event: 'T/O', local: toLocal, show: showTakeoff }
-            );
-
-            if (landTime) {
-              // Land must occur after T/O. resolveTime steps forward one day when the
-              // entered time is numerically before T/O (e.g. Land 0200Z, T/O 2300Z).
-              const landRaw   = parseTime(landTime, toLocal);
-              const landLocal = resolveTime(landTime, toLocal, 'after');
-              if (landRaw && landLocal && landRaw < toLocal) {
-                warnings.push({ text: 'Land time interpreted as next day', severity: 'caution' });
-              }
-              if (landLocal) {
-                results.push({ event: 'Land', local: landLocal, show: showLand });
-                duration = formatDuration(landLocal.diff(toLocal, 'minutes').minutes);
-              }
-            }
-
-            // FDP: starts 1hr after alert notification (LFA missions) or at show (self-alert)
-            const fdpHours = crewType === 'Basic Crew' ? 16 : 24;
-            let fdpStartLocal;
-            if (alertType === 'LFA' && effectiveAlertLocal) {
-              fdpStartLocal = effectiveAlertLocal.plus({ hours: 1 });
-            } else {
-              fdpStartLocal = showLocal;
-            }
-            const fdpEndLocal = fdpStartLocal.plus({ hours: fdpHours });
-            results.push({ event: 'FDP End', local: fdpEndLocal, show: showFDP });
-          }
-
-          // Mark rows that fall before LFA as out-of-order (tight Case C only)
-          if (alertType === 'LFA' && lfaLocal && alertLocal && alertLocal < lfaLocal) {
-            results.forEach(r => {
-              if (r.event !== 'Crew Rest' && r.event !== 'LFA' && r.local < lfaLocal) {
-                r.outOfOrder = true;
-              }
-            });
-          }
-
-          results.sort((a, b) => a.local.toMillis() - b.local.toMillis());
-
-          return { results, warnings, duration };
+          return {
+            warnings: raw.warnings,
+            duration: raw.duration,
+            results: raw.results.map((row) => ({
+              ...row,
+              show: eventVisibility[row.event] ?? true
+            }))
+          };
         } catch (err) {
           console.error('Calculation error:', err);
           return null;
         }
-      }, [alertType, season, formationType, crewType, briefMinutes, briefReference, parseTime, resolveTime, getIntervals, takeoffTime, landTime, lfaTime,
-          showCrewRest, showLFA, showAlert, showCheckIn, showShow, showBrief, showStep, showStart, showTakeoff, showLand, showFDP]);
+      }, [alertType, season, formationType, crewType, timezone, inputTimezone, takeoffTime, landTime, lfaTime, briefMinutes, briefReference, eventVisibility]);
 
       const results = computed ? computed.results : null;
       const warnings = computed ? computed.warnings : [];

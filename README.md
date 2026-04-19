@@ -74,4 +74,5 @@ Single-file PWA — no build step, no dependencies to install. Served as static 
 - React 18 (UMD)
 - htm (JSX-like templating, no transpiler)
 - Luxon (date/time math)
+- Shared `mission-timing.js` domain engine used by app + test suite
 - Service worker for offline caching
