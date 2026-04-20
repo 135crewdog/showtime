@@ -1,8 +1,9 @@
-const CACHE_NAME = 'showtime-v1.5.5';
+const CACHE_NAME = 'showtime-v1.5.6';
 const ASSETS = [
   './',
   './index.html',
   './manifest.json',
+  './mission-timing.js',
   'https://unpkg.com/react@18.2.0/umd/react.production.min.js',
   'https://unpkg.com/react-dom@18.2.0/umd/react-dom.production.min.js',
   'https://unpkg.com/htm@3.1.1/dist/htm.umd.js',
