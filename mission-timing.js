@@ -1,7 +1,7 @@
 // Pure mission timing calculation engine.
 // No DOM, no React, no globals — safe to import in both app and test suite.
 
-export const APP_VERSION = '1.5.5';
+export const APP_VERSION = '1.5.6';
 
 export const REGS = {
   crewRestHours: 12,          // AFMAN 11-202V3 para 3.1
@@ -228,5 +228,17 @@ export function calculateMissionTimes(DateTime, config) {
   }
 
   results.sort((a, b) => a.local.toMillis() - b.local.toMillis());
+
+  // Annotate each result with calendar-day offsets relative to T/O.
+  // localDayOffset: days from T/O's local calendar day (e.g. -1 = night before T/O).
+  // zuluDayOffset:  days from T/O's UTC calendar day.
+  // Used by the UI to append "+N"/"-N" so multi-day timelines are unambiguous.
+  const toLocalDay = toLocal.startOf('day');
+  const toZuluDay  = toLocal.toUTC().startOf('day');
+  results.forEach(r => {
+    r.localDayOffset = Math.round(r.local.startOf('day').diff(toLocalDay, 'days').days);
+    r.zuluDayOffset  = Math.round(r.local.toUTC().startOf('day').diff(toZuluDay, 'days').days);
+  });
+
   return { results, warnings, duration };
 }

@@ -1500,7 +1500,7 @@
       // Old code: dt.minus({days:1}) in wall-clock → 2026-03-07 23:00 UTC (wrong, +1 h).
       const tz = 'America/New_York';
       const toRef = DateTime.utc(2026, 3, 8, 5, 0).setZone(tz);
-      const lfa = resolveTime('2200', 'Z', tz, toRef, 'before');
+      const lfa = resolveTime(DateTime, '2200', 'Z', tz, toRef, 'before');
       assertEqual(lfa.toUTC().hour, 22, 'LFA UTC hour is 22 (2200Z)');
       assertEqual(lfa.toUTC().day,   7, 'LFA is on March 7');
       assertTrue(lfa < toRef, 'LFA is before T/O');
@@ -1513,7 +1513,7 @@
       // Old code: dt.minus({days:1}) in wall-clock → 2026-10-31 21:00 UTC (wrong, -1 h).
       const tz = 'America/New_York';
       const toRef = DateTime.utc(2026, 11, 1, 5, 0).setZone(tz);
-      const lfa = resolveTime('2200', 'Z', tz, toRef, 'before');
+      const lfa = resolveTime(DateTime, '2200', 'Z', tz, toRef, 'before');
       assertEqual(lfa.toUTC().hour, 22, 'LFA UTC hour is 22 (2200Z)');
       assertEqual(lfa.toUTC().day,  31, 'LFA is on Oct 31');
       assertTrue(lfa < toRef, 'LFA is before T/O');
@@ -1525,7 +1525,7 @@
       // Old code: dt.plus({days:1}) in wall-clock → 2026-03-09 01:00 UTC (wrong, -1 h).
       const tz = 'America/New_York';
       const toRef = DateTime.utc(2026, 3, 8, 21, 0).setZone(tz);
-      const land = resolveTime('0200', 'Z', tz, toRef, 'after');
+      const land = resolveTime(DateTime, '0200', 'Z', tz, toRef, 'after');
       assertEqual(land.toUTC().hour, 2, 'Land UTC hour is 02 (0200Z)');
       assertEqual(land.toUTC().day,  9, 'Land is on March 9');
       assertTrue(land > toRef, 'Land is after T/O');
@@ -1535,7 +1535,7 @@
       // UTC has no offset changes; fix must not break this case.
       const tz = 'UTC';
       const toRef = DateTime.utc(2026, 3, 8, 5, 0).setZone(tz);
-      const lfa = resolveTime('2200', 'Z', tz, toRef, 'before');
+      const lfa = resolveTime(DateTime, '2200', 'Z', tz, toRef, 'before');
       assertEqual(lfa.toUTC().hour, 22, 'LFA UTC hour is 22 (2200Z)');
       assertEqual(lfa.toUTC().day,   7, 'LFA is on March 7');
       assertTrue(lfa < toRef, 'LFA is before T/O');
@@ -1545,9 +1545,82 @@
       // When inputTimezone is not 'Z', the wall-clock minus({days:1}) is still used.
       const tz = 'America/New_York';
       const toRef = DateTime.now().setZone(tz).set({ hour: 5, minute: 0, second: 0, millisecond: 0 });
-      const lfa = resolveTime('2200', 'Local', tz, toRef, 'before');
+      const lfa = resolveTime(DateTime, '2200', 'Local', tz, toRef, 'before');
       assertEqual(lfa.hour, 22, 'LFA local hour is 22');
       assertTrue(lfa < toRef, 'LFA is before T/O');
+    });
+
+    // ============================================================
+    // 19. Day offset annotation (v1.5.6)
+    //
+    // Every result carries localDayOffset and zuluDayOffset relative
+    // to T/O's calendar day.  These are used by the UI to append
+    // "+1"/"-1" labels so multi-day timelines are unambiguous.
+    // ============================================================
+
+    test('[Day Offset] LFA night-before: LFA localDayOffset=-1, T/O=0', () => {
+      // LFA 2200 (prev day), T/O 0500
+      const result = calculate({
+        ...BASE, alertType: 'LFA', season: 'Summer', formationType: 'Single Ship',
+        crewType: 'Basic Crew', lfaTime: '2200', takeoffTime: '0500', landTime: ''
+      });
+      const lfaRow = result.results.find(r => r.event === 'LFA');
+      const toRow  = result.results.find(r => r.event === 'T/O');
+      assertEqual(lfaRow.localDayOffset, -1, 'LFA is calendar day -1 from T/O');
+      assertEqual(toRow.localDayOffset,   0, 'T/O day offset is 0');
+    });
+
+    test('[Day Offset] Same-day LFA: LFA and T/O share localDayOffset=0', () => {
+      // LFA 0500, T/O 0915 — both same day
+      const result = calculate({
+        ...BASE, alertType: 'LFA', season: 'Summer', formationType: 'Single Ship',
+        crewType: 'Basic Crew', lfaTime: '0500', takeoffTime: '0915', landTime: ''
+      });
+      const lfaRow = result.results.find(r => r.event === 'LFA');
+      const toRow  = result.results.find(r => r.event === 'T/O');
+      assertEqual(lfaRow.localDayOffset, 0, 'LFA same day as T/O');
+      assertEqual(toRow.localDayOffset,  0, 'T/O day offset is 0');
+    });
+
+    test('[Day Offset] Augmented crew FDP End spans to next day', () => {
+      // T/O 1000L, show 0645L, FDP start=0645, +24hr = 0645 next day → localDayOffset=+1
+      const result = calculate({
+        ...BASE, alertType: 'Self Alert', season: 'Summer', formationType: 'Single Ship',
+        crewType: 'Augmented Crew', takeoffTime: '1000', lfaTime: '', landTime: ''
+      });
+      const fdpRow = result.results.find(r => r.event === 'FDP End');
+      assertEqual(fdpRow.localDayOffset, 1, 'Augmented FDP End is day +1');
+    });
+
+    test('[Day Offset] Crew rest for overnight LFA is day -1 or earlier', () => {
+      // LFA 2200 prev day; crew rest = alert+1h-12h lands early on prev day
+      const result = calculate({
+        ...BASE, alertType: 'LFA', season: 'Summer', formationType: 'Single Ship',
+        crewType: 'Basic Crew', lfaTime: '2200', takeoffTime: '0500', landTime: ''
+      });
+      const crRow = result.results.find(r => r.event === 'Crew Rest');
+      assertTrue(crRow.localDayOffset <= -1, 'Crew Rest is at least day -1 from T/O');
+    });
+
+    test('[Day Offset] zuluDayOffset matches UTC day boundary', () => {
+      // UTC timezone: local==Zulu, so localDayOffset === zuluDayOffset always
+      const result = calculate({
+        timezone: 'UTC', inputTimezone: 'Z',
+        alertType: 'LFA', season: 'Summer', formationType: 'Single Ship',
+        crewType: 'Basic Crew', lfaTime: '2200', takeoffTime: '0500', landTime: ''
+      });
+      result.results.forEach(r => {
+        assertEqual(r.localDayOffset, r.zuluDayOffset, `${r.event}: local and zulu offsets equal in UTC zone`);
+      });
+    });
+
+    test('[Day Offset] Next-day land has localDayOffset=+1', () => {
+      const result = calculate({
+        ...BASE, alertType: 'Self Alert', season: 'Summer', formationType: 'Single Ship',
+        crewType: 'Basic Crew', takeoffTime: '2200', landTime: '0300', lfaTime: ''
+      });
+      const landRow = result.results.find(r => r.event === 'Land');
+      assertEqual(landRow.localDayOffset, 1, 'Next-day Land is day +1');
     });
 
     // ============================================================
