@@ -1,7 +1,7 @@
 // Pure mission timing calculation engine.
 // No DOM, no React, no globals — safe to import in both app and test suite.
 
-export const APP_VERSION = '1.5.6';
+export const APP_VERSION = '1.5.7';
 
 export const REGS = {
   crewRestHours: 12,          // AFMAN 11-202V3 para 3.1
@@ -159,6 +159,10 @@ export function calculateMissionTimes(DateTime, config) {
       .minus({ hours: REGS.crewRestHours });
   } else if (toLocal) {
     crewRestLocal = toLocal.minus(intervals.showToTO).minus({ hours: REGS.crewRestHours });
+  }
+
+  if (lfaLocal && crewRestLocal && crewRestLocal > lfaLocal) {
+    crewRestLocal = lfaLocal;
   }
 
   if (crewRestLocal) results.push({ event: 'Crew Rest', local: crewRestLocal });
