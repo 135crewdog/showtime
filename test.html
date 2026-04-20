@@ -1656,6 +1656,45 @@
     });
 
     // ============================================================
+    // 20. Crew Rest Cap Tests
+    // ============================================================
+
+    test('[Crew Rest Cap] LFA=2200 T/O=1500 Summer — crew rest capped at LFA', () => {
+      // Uncapped crewRest = alert(2200) + 1h - 12h = 2300 prev day > LFA 2200 prev day → cap fires
+      const result = calculate({
+        ...BASE, alertType: 'LFA', season: 'Summer', formationType: 'Single Ship',
+        crewType: 'Basic Crew', lfaTime: '2200', takeoffTime: '1500', landTime: ''
+      });
+      const cr  = findEvent(result.results, 'Crew Rest');
+      const lfa = findEvent(result.results, 'LFA');
+      assertClose(cr, '2200', 'Crew Rest capped at LFA time');
+      assertTrue(cr <= lfa, 'Crew Rest at or before LFA');
+    });
+
+    test('[Crew Rest Cap] LFA=2200 T/O=0500 Summer — crew rest not capped (crewRest < LFA)', () => {
+      // alert = T/O - 4h15 = 0045; crewRest = 0045 + 1h - 12h = 1345 prev day < LFA 2200 prev day → no cap
+      const result = calculate({
+        ...BASE, alertType: 'LFA', season: 'Summer', formationType: 'Single Ship',
+        crewType: 'Basic Crew', lfaTime: '2200', takeoffTime: '0500', landTime: ''
+      });
+      const cr  = findEvent(result.results, 'Crew Rest');
+      const lfa = findEvent(result.results, 'LFA');
+      assertTrue(cr < lfa, 'Crew Rest before LFA (no cap needed)');
+    });
+
+    test('[Crew Rest Cap] Crew Rest always before LFA in sorted results', () => {
+      for (const takeoffTime of ['0500', '1000', '1500']) {
+        const result = calculate({
+          ...BASE, alertType: 'LFA', season: 'Summer', formationType: 'Single Ship',
+          crewType: 'Basic Crew', lfaTime: '2200', takeoffTime, landTime: ''
+        });
+        const crIdx  = result.results.findIndex(r => r.event === 'Crew Rest');
+        const lfaIdx = result.results.findIndex(r => r.event === 'LFA');
+        assertTrue(crIdx < lfaIdx, `Crew Rest before LFA for T/O=${takeoffTime}`);
+      }
+    });
+
+    // ============================================================
     // Render results
     // ============================================================
 
