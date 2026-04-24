@@ -1554,8 +1554,8 @@
     // 19. Day offset annotation (v1.5.6)
     //
     // Every result carries localDayOffset and zuluDayOffset relative
-    // to T/O's calendar day.  These are used by the UI to append
-    // "+1"/"-1" labels so multi-day timelines are unambiguous.
+    // to T/O's calendar day, indicating how many calendar days the
+    // event falls from T/O in local and Zulu time respectively.
     // ============================================================
 
     test('[Day Offset] LFA night-before: LFA localDayOffset=-1, T/O=0', () => {
