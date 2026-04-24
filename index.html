@@ -73,9 +73,6 @@
 
     const sanitizeTimeInput = (val) => val.replace(/\D/g, '').slice(0, 4);
 
-    // Returns '+1', '-1', etc. for cross-day events; empty string for same day.
-    const dayOffsetLabel = (n) => n > 0 ? '+' + n : n < 0 ? String(n) : '';
-
     const ShowTime = () => {
       const savedConfig = (() => {
         try { return JSON.parse(localStorage.getItem('showtime-config') || '{}'); } catch { return {}; }
@@ -303,8 +300,8 @@
 
       const formatTime = useCallback((r) => {
         if (!r || !r.local) return '';
-        const local = r.local.toFormat('HHmm') + 'L' + dayOffsetLabel(r.localDayOffset ?? 0);
-        const zulu  = r.local.toUTC().toFormat('HHmm') + 'Z' + dayOffsetLabel(r.zuluDayOffset ?? 0);
+        const local = r.local.toFormat('HHmm') + 'L';
+        const zulu  = r.local.toUTC().toFormat('HHmm') + 'Z';
         return local + ' / ' + zulu;
       }, []);
 
@@ -334,7 +331,7 @@
         if (!results) return '';
         const rows = results
           .filter(r => visibleEvents[r.event])
-          .map(r => `| ${r.event} | ${r.local.toFormat('HHmm')}L${dayOffsetLabel(r.localDayOffset ?? 0)} | ${r.local.toUTC().toFormat('HHmm')}Z${dayOffsetLabel(r.zuluDayOffset ?? 0)} |`);
+          .map(r => `| ${r.event} | ${r.local.toFormat('HHmm')}L | ${r.local.toUTC().toFormat('HHmm')}Z |`);
         if (duration && visibleEvents['Dur']) rows.push(`| Dur | ${duration} |  |`);
         return ['| Event | Local | Zulu |', '| --- | --- | --- |', ...rows].join('\n');
       }, [results, duration, visibleEvents]);
@@ -825,8 +822,8 @@
                             ${visibleResults.map((r, i) => html`
                               <tr key=${i} style=${{borderBottom: (i < visibleResults.length - 1 || (duration && visibleEvents['Dur'])) ? '1px solid ' + colors.border : 'none'}}>
                                 <td style=${{fontWeight: '600', color: r.outOfOrder ? colors.destructive : colors.text, paddingTop: '10px', paddingBottom: '10px'}}>${r.event}</td>
-                                <td style=${{textAlign: 'right', color: r.outOfOrder ? colors.destructive : colors.text, paddingTop: '10px', paddingBottom: '10px'}}>${r.local.toFormat('HHmm')}L${dayOffsetLabel(r.localDayOffset ?? 0)}</td>
-                                <td style=${{textAlign: 'right', color: r.outOfOrder ? colors.destructive : colors.text, paddingTop: '10px', paddingBottom: '10px'}}>${r.local.toUTC().toFormat('HHmm')}Z${dayOffsetLabel(r.zuluDayOffset ?? 0)}</td>
+                                <td style=${{textAlign: 'right', color: r.outOfOrder ? colors.destructive : colors.text, paddingTop: '10px', paddingBottom: '10px'}}>${r.local.toFormat('HHmm')}L</td>
+                                <td style=${{textAlign: 'right', color: r.outOfOrder ? colors.destructive : colors.text, paddingTop: '10px', paddingBottom: '10px'}}>${r.local.toUTC().toFormat('HHmm')}Z</td>
                               </tr>
                             `)}
                             ${duration && visibleEvents['Dur'] && html`

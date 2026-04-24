@@ -1,7 +1,7 @@
 // Pure mission timing calculation engine.
 // No DOM, no React, no globals — safe to import in both app and test suite.
 
-export const APP_VERSION = '1.5.7';
+export const APP_VERSION = '1.5.8';
 
 export const REGS = {
   crewRestHours: 12,          // AFMAN 11-202V3 para 3.1
