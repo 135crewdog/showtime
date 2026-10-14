@@ -1,4 +1,4 @@
-const CACHE_NAME = 'showtime-v1.5.9';
+const CACHE_NAME = 'showtime-v1.5.10';
 const ASSETS = [
   './',
   './index.html',
@@ -29,7 +29,10 @@ self.addEventListener('activate', (event) => {
   event.waitUntil(
     caches.keys()
       .then((keys) => Promise.all(
-        keys.filter((key) => key !== CACHE_NAME).map((key) => caches.delete(key))
+        // Cache storage is shared by every app on the origin; only delete our own.
+        keys
+          .filter((key) => key.startsWith('showtime-') && key !== CACHE_NAME)
+          .map((key) => caches.delete(key))
       ))
       .then(() => self.clients.claim())
   );
