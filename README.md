@@ -12,7 +12,7 @@ Installable as a PWA on iOS and Android. Works offline after first load.
 
 - **LFA and Self Alert modes** — LFA mode derives takeoff from alert time (or vice versa) and warns when the two don't match the expected interval
 - **Summer/Winter profiles** — automatically adjusts all intervals per AFMAN 11-2KC-135V3
-- **Single Ship and Formation** — formation adds a Check In event 5 min before Start
+- **Single Ship and Formation** — formation shows 30 min earlier (3+45 summer / 4+15 winter per AFMAN 11-2KC-135V3_MILDENHALLSUP) and adds a Check In event 5 min before Start
 - **Basic and Augmented crew** — drives the FDP limit (16 or 24 hours)
 - **Configurable crew brief** — set offset in 5-min increments (15–90 min) relative to Show or Step
 - **Local/Zulu input** — enter times in either timezone; all output shows both
