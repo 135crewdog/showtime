@@ -707,6 +707,7 @@
 
     test('[Intervals] Summer Formation', () => {
       const i = getIntervals('Summer', 'Formation');
+      assertEqual(i.showToTO.hours, 3, 'Show-TO hrs'); assertEqual(i.showToTO.minutes, 45, 'Show-TO min (Formation 3+45)');
       assertEqual(i.stepToTO.hours, 2, 'Step-TO hrs'); assertEqual(i.stepToTO.minutes, 0, 'Step-TO min');
       // Other intervals same as Single Ship
       assertEqual(i.lfaToTO.hours, 4, 'LFA-TO hrs'); assertEqual(i.lfaToTO.minutes, 15, 'LFA-TO min');
@@ -723,6 +724,7 @@
 
     test('[Intervals] Winter Formation', () => {
       const i = getIntervals('Winter', 'Formation');
+      assertEqual(i.showToTO.hours, 4, 'Show-TO hrs'); assertEqual(i.showToTO.minutes, 15, 'Show-TO min (Formation 4+15)');
       assertEqual(i.stepToTO.hours, 2, 'Step-TO hrs'); assertEqual(i.stepToTO.minutes, 0, 'Step-TO min');
       assertEqual(i.startToTO.minutes, 30, 'Start-TO min (same as single ship)');
     });
@@ -787,8 +789,8 @@
       assertClose(findEvent(result.results, 'LFA'), '0400', 'LFA');
       // TO = 0400 + 4:45 = 0845
       assertClose(findEvent(result.results, 'T/O'), '0845', 'T/O');
-      // Show = 0845 - 3:45 = 0500
-      assertClose(findEvent(result.results, 'Show'), '0500', 'Show');
+      // Show = 0845 - 4:15 = 0430 (Formation show 4+15 in Winter)
+      assertClose(findEvent(result.results, 'Show'), '0430', 'Show');
       // Step = 0845 - 2:00 = 0645 (Formation always 2+00)
       assertClose(findEvent(result.results, 'Step'), '0645', 'Step');
       // Start = 0845 - 0:30 = 0815 (Winter)
@@ -931,9 +933,9 @@
     //
     // Show-to-Step window by season/formation:
     //   Summer Single Ship:  195 - 105 = 90 min
-    //   Summer Formation:    195 - 120 = 75 min
+    //   Summer Formation:    225 - 120 = 105 min
     //   Winter Single Ship:  225 - 120 = 105 min
-    //   Winter Formation:    225 - 120 = 105 min
+    //   Winter Formation:    255 - 120 = 135 min
     // ============================================================
 
     test('[Brief Config] 30 min After Show (default) = old 2+45 before T/O, Summer SS', () => {
@@ -980,15 +982,15 @@
       assertNoWarnings(result.warnings, 'No window warning');
     });
 
-    test('[Brief Config] 45 min After Show, Summer Formation — T/O 1000 → brief 0730', () => {
-      // showToTO=195, 195-45=150 min before T/O
+    test('[Brief Config] 45 min After Show, Summer Formation — T/O 1000 → brief 0700', () => {
+      // showToTO=225 (Formation), 225-45=180 min before T/O
       const result = calculate({
         ...BASE, alertType: 'Self Alert', season: 'Summer', formationType: 'Formation',
         crewType: 'Basic Crew', takeoffTime: '1000', lfaTime: '',
         briefMinutes: 45, briefReference: 'After Show'
       });
-      assertClose(findEvent(result.results, 'Brief'), '0730', 'Brief');
-      assertNoWarnings(result.warnings, 'No window warning (window=75, 45<75)');
+      assertClose(findEvent(result.results, 'Brief'), '0700', 'Brief');
+      assertNoWarnings(result.warnings, 'No window warning (window=105, 45<105)');
     });
 
     test('[Brief Config] 45 min After Show, Winter SS — T/O 1000 → brief 0700', () => {
@@ -1153,24 +1155,24 @@
       assertNoWarnings(result.warnings, 'No warn (89 After Show, Summer SS, window=90)');
     });
 
-    test('[Brief Warning] After Show 75 min, Summer Formation — brief lands exactly on Step (warn)', () => {
-      // briefMinToTO = 195-75 = 120 = stepMinToTO → warn
+    test('[Brief Warning] After Show 105 min, Summer Formation — brief lands exactly on Step (warn)', () => {
+      // briefMinToTO = 225-105 = 120 = stepMinToTO → warn
       const result = calculate({
         ...BASE, alertType: 'Self Alert', season: 'Summer', formationType: 'Formation',
         crewType: 'Basic Crew', takeoffTime: '1000', lfaTime: '',
-        briefMinutes: 75, briefReference: 'After Show'
+        briefMinutes: 105, briefReference: 'After Show'
       });
-      assertWarningContains(result.warnings, 'Brief falls at or after Step', 'Warn (75 After Show, Summer Formation)');
+      assertWarningContains(result.warnings, 'Brief falls at or after Step', 'Warn (105 After Show, Summer Formation)');
     });
 
-    test('[Brief Warning] After Show 74 min, Summer Formation — just inside window (no warn)', () => {
-      // briefMinToTO = 195-74 = 121 > 120 → valid
+    test('[Brief Warning] After Show 104 min, Summer Formation — just inside window (no warn)', () => {
+      // briefMinToTO = 225-104 = 121 > 120 → valid
       const result = calculate({
         ...BASE, alertType: 'Self Alert', season: 'Summer', formationType: 'Formation',
         crewType: 'Basic Crew', takeoffTime: '1000', lfaTime: '',
-        briefMinutes: 74, briefReference: 'After Show'
+        briefMinutes: 104, briefReference: 'After Show'
       });
-      assertNoWarnings(result.warnings, 'No warn (74 After Show, Summer Formation, window=75)');
+      assertNoWarnings(result.warnings, 'No warn (104 After Show, Summer Formation, window=105)');
     });
 
     test('[Brief Warning] After Show 90 min, Winter SS — inside larger window (no warn)', () => {
@@ -1213,14 +1215,14 @@
       assertNoWarnings(result.warnings, 'No warn (89 Before Step, Summer SS)');
     });
 
-    test('[Brief Warning] Before Step 75 min, Summer Formation — brief lands exactly on Show (warn)', () => {
-      // briefMinToTO = 120+75 = 195 = showMinToTO → warn
+    test('[Brief Warning] Before Step 105 min, Summer Formation — brief lands exactly on Show (warn)', () => {
+      // briefMinToTO = 120+105 = 225 = showMinToTO → warn
       const result = calculate({
         ...BASE, alertType: 'Self Alert', season: 'Summer', formationType: 'Formation',
         crewType: 'Basic Crew', takeoffTime: '1000', lfaTime: '',
-        briefMinutes: 75, briefReference: 'Before Step'
+        briefMinutes: 105, briefReference: 'Before Step'
       });
-      assertWarningContains(result.warnings, 'Brief falls at or before Show', 'Warn (75 Before Step, Summer Formation)');
+      assertWarningContains(result.warnings, 'Brief falls at or before Show', 'Warn (105 Before Step, Summer Formation)');
     });
 
     test('[Brief Warning] Window violation does not break other events', () => {

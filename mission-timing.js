@@ -1,7 +1,7 @@
 // Pure mission timing calculation engine.
 // No DOM, no React, no globals — safe to import in both app and test suite.
 
-export const APP_VERSION = '1.5.10';
+export const APP_VERSION = '1.5.11';
 
 export const REGS = {
   crewRestHours: 12,          // AFMAN 11-202V3 para 3.1
@@ -12,14 +12,16 @@ export const REGS = {
   intervals: {
     Summer: {
       lfaToTO:        { hours: 4, minutes: 15 },
-      showToTO:       { hours: 3, minutes: 15 },
+      showSingleToTO: { hours: 3, minutes: 15 },
+      showFormToTO:   { hours: 3, minutes: 45 },
       stepSingleToTO: { hours: 1, minutes: 45 },
       stepFormToTO:   { hours: 2, minutes:  0 },
       startToTO:      { hours: 0, minutes: 25 }
     },
     Winter: {
       lfaToTO:        { hours: 4, minutes: 45 },
-      showToTO:       { hours: 3, minutes: 45 },
+      showSingleToTO: { hours: 3, minutes: 45 },
+      showFormToTO:   { hours: 4, minutes: 15 },
       stepSingleToTO: { hours: 2, minutes:  0 },
       stepFormToTO:   { hours: 2, minutes:  0 },
       startToTO:      { hours: 0, minutes: 30 }
@@ -38,7 +40,7 @@ export function getIntervals(season, formationType) {
   const s = REGS.intervals[season];
   return {
     lfaToTO:  s.lfaToTO,
-    showToTO: s.showToTO,
+    showToTO: formationType === 'Single Ship' ? s.showSingleToTO : s.showFormToTO,
     stepToTO: formationType === 'Single Ship' ? s.stepSingleToTO : s.stepFormToTO,
     startToTO: s.startToTO
   };
