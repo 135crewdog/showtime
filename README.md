@@ -4,7 +4,7 @@ KC-135 mission timing calculator for aircrew. Given a takeoff time or LFA, Show 
 
 Installable as a PWA on iOS and Android. Works offline after first load.
 
-**Current version: v1.5.13**
+**Current version: v1.5.14**
 
 ---
 
@@ -27,19 +27,24 @@ Installable as a PWA on iOS and Android. Works offline after first load.
 
 ## Timing Intervals
 
-| Interval | Summer | Winter |
-|---|---|---|
-| LFA → T/O (Single Ship) | 4+15 | 4+45 |
-| LFA → T/O (Formation) | 4+45 | 5+15 |
-| Show → T/O (Single Ship) | 3+15 | 3+45 |
-| Show → T/O (Formation) | 3+45 | 4+15 |
-| Step → T/O (Single Ship) | 1+45 | 2+00 |
-| Step → T/O (Formation) | 2+00 | 2+00 |
-| Start → T/O | 0+25 | 0+30 |
+Time from each event to T/O, in hh+mm. The same table is shown in the app under Settings → Timing Intervals, generated from `REGS` in `mission-timing.js`.
+
+| Event | Summer Single Ship | Summer Formation | Winter Single Ship | Winter Formation |
+|---|---|---|---|---|
+| Crew Rest | 15+15 | 15+45 | 15+45 | 16+15 |
+| LFA / Alert | 4+15 | 4+45 | 4+45 | 5+15 |
+| Show | 3+15 | 3+45 | 3+45 | 4+15 |
+| Brief *(default, 30 min after Show)* | 2+45 | 3+15 | 3+15 | 3+45 |
+| Step | 1+45 | 2+00 | 2+00 | 2+00 |
+| Check In *(Start − 5 min)* | — | 0+30 | — | 0+35 |
+| Start | 0+25 | 0+25 | 0+30 | 0+30 |
+| T/O | 0+00 | 0+00 | 0+00 | 0+00 |
+| FDP End, Basic *(after T/O)* | +12+45 | +12+15 | +12+15 | +11+45 |
+| FDP End, Augmented *(after T/O)* | +20+45 | +20+15 | +20+15 | +19+45 |
 
 Alert to Show is always 1 hour, so LFA → T/O is Show → T/O + 1 hour for every combination.
 
-Crew rest is 12 hours before FDP start. In LFA mode it is fixed by the LFA (LFA + 1 hr − 12 hr); in self-alert mode FDP starts at show.
+Crew rest is 12 hours before FDP start. In LFA mode it is fixed by the LFA (LFA + 1 hr − 12 hr); in self-alert mode FDP starts at show. Because Show = Alert + 1 hr, both give the same crew rest for a given T/O.
 
 FDP starts no later than 1 hour after alert notification (or at show when self-alerting). The alert time is only determined by the inputs when it is pinned to LFA — T/O only, or LFA + T/O with no slack — so FDP End is only output in those cases. With LFA + T/O and slack, C2 could alert any time between LFA and T/O minus the alert interval, and FDP End is omitted rather than guessed.
 
