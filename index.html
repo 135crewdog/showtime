@@ -68,7 +68,7 @@
   <div id="root"></div>
 
   <script type="module">
-    import { calculateMissionTimes, APP_VERSION, REGS } from './mission-timing.js';
+    import { calculateMissionTimes, APP_VERSION, REGS, getIntervals, formatDuration } from './mission-timing.js';
 
     const { useState, useRef, useEffect, useMemo, useCallback } = React;
     const { DateTime } = luxon;
@@ -660,6 +660,62 @@
                     <p style=${{margin: '0 0 12px 0'}}>This app is an unofficial tool for mission timing calculations. Always verify results against official publications and coordinate with your command and control agency.</p>
                     <p style=${{margin: 0}}>The developer assumes no liability for operational decisions made using this tool.</p>
                   </div>
+                </div>
+              </div>
+              <div style=${styles.section}>
+                <div style=${styles.sectionTitle}>TIMING INTERVALS</div>
+                <div style=${styles.sectionContent}>
+                  ${['Summer', 'Winter'].map(season => {
+                    const toMin = d => d.hours * 60 + d.minutes;
+                    const ss = getIntervals(season, 'Single Ship');
+                    const fm = getIntervals(season, 'Formation');
+                    const brief = i => {
+                      const b = briefReference === 'After Show' ? toMin(i.showToTO) - briefMinutes : toMin(i.stepToTO) + briefMinutes;
+                      return b;
+                    };
+                    const rows = [
+                      ['Crew Rest *', toMin(ss.showToTO) + REGS.crewRestHours * 60, toMin(fm.showToTO) + REGS.crewRestHours * 60],
+                      ['LFA / Alert', toMin(ss.lfaToTO), toMin(fm.lfaToTO)],
+                      ['Show', toMin(ss.showToTO), toMin(fm.showToTO)],
+                      ['Brief', brief(ss), brief(fm)],
+                      ['Step', toMin(ss.stepToTO), toMin(fm.stepToTO)],
+                      ['Check In', null, toMin(fm.startToTO) + REGS.checkInBeforeStartMin],
+                      ['Start', toMin(ss.startToTO), toMin(fm.startToTO)],
+                      ['T/O', 0, 0],
+                      ['FDP End (Basic) *', -(REGS.fdpBasicHours * 60 - toMin(ss.showToTO)), -(REGS.fdpBasicHours * 60 - toMin(fm.showToTO))],
+                      ['FDP End (Aug) *', -(REGS.fdpAugmentedHours * 60 - toMin(ss.showToTO)), -(REGS.fdpAugmentedHours * 60 - toMin(fm.showToTO))]
+                    ];
+                    const cell = v => v === null ? '—' : (v < 0 ? '+' + formatDuration(-v) : formatDuration(v));
+                    const th = { textAlign: 'right', paddingBottom: '8px', color: colors.textSecondary, fontWeight: '400', fontSize: '12px', textTransform: 'uppercase', letterSpacing: '0.5px' };
+                    const td = { textAlign: 'right', paddingTop: '8px', paddingBottom: '8px', color: colors.text, fontFamily: '"SF Mono", Monaco, monospace', fontSize: '14px' };
+                    return html`
+                      <div key=${season} style=${{...styles.outputBox, minHeight: 0, marginBottom: '12px'}}>
+                        <div style=${{fontSize: '13px', fontWeight: '600', color: colors.text, marginBottom: '8px'}}>${season} — time before T/O</div>
+                        <table style=${{width: '100%', borderCollapse: 'collapse'}}>
+                          <thead>
+                            <tr style=${{borderBottom: '1px solid ' + colors.border}}>
+                              <th scope="col" style=${{...th, textAlign: 'left'}}>Event</th>
+                              <th scope="col" style=${th}>Single Ship</th>
+                              <th scope="col" style=${th}>Formation</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            ${rows.map(([ev, a, b], i) => html`
+                              <tr key=${ev} style=${{borderBottom: i < rows.length - 1 ? '1px solid ' + colors.border : 'none'}}>
+                                <td style=${{...td, textAlign: 'left', fontFamily: 'inherit', fontWeight: '600'}}>${ev}</td>
+                                <td style=${td}>${cell(a)}</td>
+                                <td style=${td}>${cell(b)}</td>
+                              </tr>
+                            `)}
+                          </tbody>
+                        </table>
+                      </div>
+                    `;
+                  })}
+                  <p style=${{margin: '4px 16px 0', fontSize: '12px', lineHeight: '1.6', color: colors.textSecondary}}>
+                    Brief reflects your current Crew Brief setting (${briefMinutes} min ${briefReference}). FDP End is shown as time <em>after</em> T/O.<br/><br/>
+                    * Crew Rest and FDP End rows assume the alert is at T/O minus the LFA interval, i.e. FDP starts at Show. That holds for Self Alert, T/O-only, and LFA + T/O with no slack. When you enter an LFA earlier than that, Crew Rest is LFA + 1 hr − 12 hr regardless of T/O, and FDP End is not determined — use the Output tab, which applies the right rule.
+                  </p>
                 </div>
               </div>
               <div style=${styles.section}>
