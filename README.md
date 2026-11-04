@@ -4,13 +4,13 @@ KC-135 mission timing calculator for aircrew. Given a takeoff time or LFA, Show 
 
 Installable as a PWA on iOS and Android. Works offline after first load.
 
-**Current version: v1.5.11**
+**Current version: v1.5.12**
 
 ---
 
 ## Features
 
-- **LFA and Self Alert modes** — LFA mode derives takeoff from alert time (or vice versa) and warns when the two don't match the expected interval
+- **LFA and Self Alert modes** — LFA mode derives the latest legal LFA/Alert from takeoff, and warns when a given LFA and T/O are closer than the required interval. Only outputs what the inputs determine: with LFA alone, just Crew Rest and LFA
 - **Summer/Winter profiles** — automatically adjusts all intervals per AFMAN 11-2KC-135V3
 - **Single Ship and Formation** — formation shows 30 min earlier (3+45 summer / 4+15 winter per AFMAN 11-2KC-135V3_MILDENHALLSUP) and adds a Check In event 5 min before Start
 - **Basic and Augmented crew** — drives the FDP limit (16 or 24 hours)
@@ -36,7 +36,9 @@ Installable as a PWA on iOS and Android. Works offline after first load.
 | Step → T/O (Formation) | 2+00 | 2+00 |
 | Start → T/O | 0+25 | 0+30 |
 
-Crew rest is 12 hours before FDP start. FDP start is LFA+1hr for alert missions, show time for self-alert.
+Crew rest is 12 hours before FDP start. In LFA mode it is fixed by the LFA (LFA + 1 hr − 12 hr); in self-alert mode FDP starts at show.
+
+FDP starts no later than 1 hour after alert notification (or at show when self-alerting). The alert time is only determined by the inputs when it is pinned to LFA — T/O only, or LFA + T/O with no slack — so FDP End is only output in those cases. With LFA + T/O and slack, C2 could alert any time between LFA and T/O minus the alert interval, and FDP End is omitted rather than guessed.
 
 ---
 

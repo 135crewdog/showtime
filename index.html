@@ -146,10 +146,11 @@
 
       useEffect(() => {
         if (alertType === 'LFA' && lfaTime && !takeoffTime) {
+          // LFA only: T/O is unknown, so only Crew Rest and LFA are output.
           setVisibleEvents({
-            'Crew Rest': true, 'LFA': true, 'Alert': true,
-            'Check In': false, 'Show': true, 'Brief': true,
-            'Step': true, 'Start': true, 'T/O': true,
+            'Crew Rest': true, 'LFA': true, 'Alert': false,
+            'Check In': false, 'Show': false, 'Brief': false,
+            'Step': false, 'Start': false, 'T/O': false,
             'Land': false, 'FDP End': false, 'Dur': false
           });
         } else if (takeoffTime) {
@@ -668,7 +669,7 @@
                     <p style=${{margin: '0 0 8px 0', fontWeight: '600'}}>Crew Rest:</p>
                     <p style=${{margin: '0 0 16px 0', color: colors.textSecondary}}>AFMAN 11-202V3 para 3.1<br/>12 hours before FDP start (LFA+1hr for alert missions, show time for self-alert)</p>
                     <p style=${{margin: '0 0 8px 0', fontWeight: '600'}}>Flight Duty Period (FDP) Start:</p>
-                    <p style=${{margin: '0 0 16px 0', color: colors.textSecondary}}>AFMAN 11-202V3_AMCSUP para 3.2.1<br/>No later than 1 hour after aircrew alert notification (or at aircrew show time when self-alerting)</p>
+                    <p style=${{margin: '0 0 16px 0', color: colors.textSecondary}}>AFMAN 11-202V3_AMCSUP para 3.2.1<br/>No later than 1 hour after aircrew alert notification (or at aircrew show time when self-alerting). FDP End is only shown when the inputs determine the alert time: T/O given, with LFA no earlier than T/O minus the alert interval.</p>
                     <p style=${{margin: '0 0 8px 0', fontWeight: '600'}}>FDP Limits:</p>
                     <p style=${{margin: '0 0 16px 0', color: colors.textSecondary}}>AFMAN 11-202V3_AMCSUP Table 3.1<br/>Basic Crew: 16 hours<br/>Augmented Crew: 24 hours</p>
                     <p style=${{margin: '0 0 8px 0', fontWeight: '600'}}>Alert Time (KC-135):</p>
@@ -872,7 +873,10 @@
                         'Show', 'Brief', 'Step', 'Start', 'T/O', 'Land',
                         ...(landTime ? ['Dur'] : []),
                         'FDP End'
-                      ].map(name => html`
+                      ].filter(name => name === 'Dur'
+                        ? !!duration
+                        : !!(results && results.some(r => r.event === name))
+                      ).map(name => html`
                         <label key=${name} style=${styles.checkboxLabel}>
                           <input type="checkbox"
                             checked=${visibleEvents[name]}

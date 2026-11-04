@@ -1,7 +1,7 @@
 // Pure mission timing calculation engine.
 // No DOM, no React, no globals — safe to import in both app and test suite.
 
-export const APP_VERSION = '1.5.11';
+export const APP_VERSION = '1.5.12';
 
 export const REGS = {
   crewRestHours: 12,          // AFMAN 11-202V3 para 3.1
@@ -127,11 +127,15 @@ export function calculateMissionTimes(DateTime, config) {
     if (!lfaLocal) return null;
   }
 
+  // Only output what the inputs determine. LFA alone does not fix a T/O
+  // (C2 may alert any time from LFA onward), so nothing downstream of T/O
+  // is derived from it. T/O alone fixes the latest legal LFA/Alert.
   let alertLocal = null;
 
   if (alertType === 'LFA') {
     if (lfaLocal && toLocal) {
-      // Case C: both provided — Alert = T/O minus required interval; warn if tight.
+      // Case C: both provided — Alert = latest legal alert (T/O minus required
+      // interval). Warn if LFA is later than that, i.e. the interval is tight.
       const calculatedAlert = toLocal.minus(intervals.lfaToTO);
       alertLocal = calculatedAlert;
       if (calculatedAlert < lfaLocal) {
@@ -142,29 +146,25 @@ export function calculateMissionTimes(DateTime, config) {
       // Case B: T/O only — LFA = Alert = T/O minus required interval.
       lfaLocal = toLocal.minus(intervals.lfaToTO);
       alertLocal = lfaLocal;
-    } else if (lfaLocal && !toLocal) {
-      // Case A: LFA only — Alert = LFA, T/O = LFA plus required interval.
-      toLocal = lfaLocal.plus(intervals.lfaToTO);
-      alertLocal = lfaLocal;
     }
+    // Case A: LFA only — output Crew Rest and LFA. T/O and Alert are unknown.
   }
 
-  // In Case C tight, crew cannot be alerted before LFA; use LFA as effective alert.
-  const effectiveAlertLocal = (alertLocal && lfaLocal && alertLocal < lfaLocal)
-    ? lfaLocal
-    : alertLocal;
+  // Alert is determined only when it is pinned to LFA: T/O-only (Case B), or
+  // LFA + T/O with no slack (Case C exact or tight). With slack, C2 could alert
+  // anywhere between LFA and the latest legal alert, so FDP is not derivable.
+  const alertDetermined = !!(alertLocal && lfaLocal && alertLocal <= lfaLocal);
 
+  // Crew rest: 12 hr before FDP start. In LFA mode the crew's rest is fixed by
+  // the LFA they were given — the latest they can enter rest and be legal at
+  // LFA is LFA + 1 hr − 12 hr. In self-alert mode FDP starts at show.
   let crewRestLocal;
-  if (alertType === 'LFA' && effectiveAlertLocal) {
-    crewRestLocal = effectiveAlertLocal
+  if (alertType === 'LFA' && lfaLocal) {
+    crewRestLocal = lfaLocal
       .plus({ hours: REGS.fdpLfaBufferHours })
       .minus({ hours: REGS.crewRestHours });
   } else if (toLocal) {
     crewRestLocal = toLocal.minus(intervals.showToTO).minus({ hours: REGS.crewRestHours });
-  }
-
-  if (lfaLocal && crewRestLocal && crewRestLocal > lfaLocal) {
-    crewRestLocal = lfaLocal;
   }
 
   if (crewRestLocal) results.push({ event: 'Crew Rest', local: crewRestLocal });
@@ -219,11 +219,18 @@ export function calculateMissionTimes(DateTime, config) {
       }
     }
 
+    // FDP starts no later than 1 hr after alert (LFA mode, only when the alert
+    // is determined by the inputs) or at show (self-alert).
     const fdpHours = crewType === 'Basic Crew' ? REGS.fdpBasicHours : REGS.fdpAugmentedHours;
-    const fdpStartLocal = (alertType === 'LFA' && effectiveAlertLocal)
-      ? effectiveAlertLocal.plus({ hours: REGS.fdpLfaBufferHours })
-      : showLocal;
-    results.push({ event: 'FDP End', local: fdpStartLocal.plus({ hours: fdpHours }) });
+    let fdpStartLocal = null;
+    if (alertType === 'LFA') {
+      if (alertDetermined) fdpStartLocal = lfaLocal.plus({ hours: REGS.fdpLfaBufferHours });
+    } else {
+      fdpStartLocal = showLocal;
+    }
+    if (fdpStartLocal) {
+      results.push({ event: 'FDP End', local: fdpStartLocal.plus({ hours: fdpHours }) });
+    }
   }
 
   // Mark rows that fall before LFA as out-of-order (Case C tight interval only).
@@ -235,12 +242,13 @@ export function calculateMissionTimes(DateTime, config) {
 
   results.sort((a, b) => a.local.toMillis() - b.local.toMillis());
 
-  // Annotate each result with calendar-day offsets relative to T/O.
-  // localDayOffset: days from T/O's local calendar day (e.g. -1 = night before T/O).
-  // zuluDayOffset:  days from T/O's UTC calendar day.
-  // Used by the UI to append "+N"/"-N" so multi-day timelines are unambiguous.
-  const toLocalDay = toLocal.startOf('day');
-  const toZuluDay  = toLocal.toUTC().startOf('day');
+  // Annotate each result with calendar-day offsets relative to T/O (or LFA
+  // when no T/O is known).
+  // localDayOffset: days from the reference's local calendar day (e.g. -1 = night before).
+  // zuluDayOffset:  days from the reference's UTC calendar day.
+  const refLocal   = toLocal || lfaLocal;
+  const toLocalDay = refLocal.startOf('day');
+  const toZuluDay  = refLocal.toUTC().startOf('day');
   results.forEach(r => {
     r.localDayOffset = Math.round(r.local.startOf('day').diff(toLocalDay, 'days').days);
     r.zuluDayOffset  = Math.round(r.local.toUTC().startOf('day').diff(toZuluDay, 'days').days);
