@@ -227,69 +227,57 @@
     }
 
     // ============================================================
-    // 2. LFA-only input (no T/O) — derives full timeline
+    // 2. LFA-only input (no T/O) — only Crew Rest and LFA are known
+    //
+    // LFA does not determine T/O (C2 may alert any time from LFA on), so
+    // nothing downstream of T/O is derived. Crew Rest = LFA + 1hr − 12hr.
     // ============================================================
 
-    test('[LFA-only] Summer Single Ship — LFA 0500 derives T/O 0915', () => {
+    const LFA_ONLY_DERIVED = ['Alert', 'Check In', 'Show', 'Brief', 'Step', 'Start', 'T/O', 'Land', 'FDP End'];
+
+    test('[LFA-only] Summer Single Ship — LFA 0500 outputs Crew Rest and LFA only', () => {
       const result = calculate({
         ...BASE, alertType: 'LFA', season: 'Summer', formationType: 'Single Ship',
         crewType: 'Basic Crew', lfaTime: '0500', takeoffTime: ''
       });
       assertNotNull(result, 'result');
-      const to = findEvent(result.results, 'T/O');
-      assertClose(to, '0915', 'T/O derived from LFA');
-      const show = findEvent(result.results, 'Show');
-      assertClose(show, '0600', 'Show');
-      const step = findEvent(result.results, 'Step');
-      assertClose(step, '0730', 'Step (Summer Single Ship)');
-      const start = findEvent(result.results, 'Start');
-      assertClose(start, '0850', 'Start (Summer)');
+      assertEqual(result.results.length, 2, 'Exactly two rows');
+      assertClose(findEvent(result.results, 'LFA'), '0500', 'LFA');
+      assertClose(findEvent(result.results, 'Crew Rest'), '1800', 'Crew Rest = LFA + 1hr − 12hr');
+      LFA_ONLY_DERIVED.forEach(ev => assertNull(findEvent(result.results, ev), ev + ' not derived from LFA alone'));
+      assertNoWarnings(result.warnings, 'No warnings');
     });
 
-    test('[LFA-only] Winter Single Ship — LFA 0500 derives T/O 0945', () => {
-      const result = calculate({
-        ...BASE, alertType: 'LFA', season: 'Winter', formationType: 'Single Ship',
-        crewType: 'Basic Crew', lfaTime: '0500', takeoffTime: ''
-      });
-      const to = findEvent(result.results, 'T/O');
-      assertClose(to, '0945', 'T/O derived from LFA (Winter)');
-      const show = findEvent(result.results, 'Show');
-      assertClose(show, '0600', 'Show (Winter)');
-      const step = findEvent(result.results, 'Step');
-      assertClose(step, '0745', 'Step (Winter Single Ship)');
-      const start = findEvent(result.results, 'Start');
-      assertClose(start, '0915', 'Start (Winter)');
-    });
-
-    test('[LFA-only] Summer Formation — LFA 0500 derives correct timeline', () => {
-      const result = calculate({
-        ...BASE, alertType: 'LFA', season: 'Summer', formationType: 'Formation',
-        crewType: 'Basic Crew', lfaTime: '0500', takeoffTime: ''
-      });
-      const to = findEvent(result.results, 'T/O');
-      assertClose(to, '0915', 'T/O');
-      const step = findEvent(result.results, 'Step');
-      assertClose(step, '0715', 'Step (Formation always 2+00)');
-      const start = findEvent(result.results, 'Start');
-      assertClose(start, '0850', 'Start (Summer)');
-      const checkIn = findEvent(result.results, 'Check In');
-      assertNotNull(checkIn, 'Check In');
-      assertClose(checkIn, '0845', 'Check In (Start - 0+05)');
-    });
-
-    test('[LFA-only] Winter Formation — LFA 0500 derives correct timeline', () => {
+    test('[LFA-only] Winter Formation — LFA 0500 outputs Crew Rest and LFA only', () => {
       const result = calculate({
         ...BASE, alertType: 'LFA', season: 'Winter', formationType: 'Formation',
+        crewType: 'Augmented Crew', lfaTime: '0500', takeoffTime: ''
+      });
+      assertEqual(result.results.length, 2, 'Exactly two rows');
+      assertClose(findEvent(result.results, 'LFA'), '0500', 'LFA');
+      assertClose(findEvent(result.results, 'Crew Rest'), '1800', 'Crew Rest independent of season/formation/crew');
+      LFA_ONLY_DERIVED.forEach(ev => assertNull(findEvent(result.results, ev), ev + ' not derived from LFA alone'));
+    });
+
+    test('[LFA-only] Crew Rest precedes LFA and is sorted first', () => {
+      const result = calculate({
+        ...BASE, alertType: 'LFA', season: 'Summer', formationType: 'Single Ship',
         crewType: 'Basic Crew', lfaTime: '0500', takeoffTime: ''
       });
-      const to = findEvent(result.results, 'T/O');
-      assertClose(to, '0945', 'T/O (Winter)');
-      const step = findEvent(result.results, 'Step');
-      assertClose(step, '0745', 'Step (Formation always 2+00)');
-      const start = findEvent(result.results, 'Start');
-      assertClose(start, '0915', 'Start (Winter)');
-      const checkIn = findEvent(result.results, 'Check In');
-      assertClose(checkIn, '0910', 'Check In (Start - 0+05)');
+      assertEqual(result.results[0].event, 'Crew Rest', 'First row');
+      assertEqual(result.results[1].event, 'LFA', 'Second row');
+      assertTrue(result.results[0].local < result.results[1].local, 'Crew Rest before LFA');
+    });
+
+    test('[LFA-only] Day offsets are relative to LFA when no T/O', () => {
+      const result = calculate({
+        ...BASE, alertType: 'LFA', season: 'Summer', formationType: 'Single Ship',
+        crewType: 'Basic Crew', lfaTime: '0500', takeoffTime: ''
+      });
+      const lfaRow = result.results.find(r => r.event === 'LFA');
+      const crRow  = result.results.find(r => r.event === 'Crew Rest');
+      assertEqual(lfaRow.localDayOffset, 0, 'LFA is the reference day');
+      assertEqual(crRow.localDayOffset, -1, 'Crew Rest 1800 is the previous day');
     });
 
     // T/O-only input derives LFA backward
@@ -363,25 +351,25 @@
       assertEqual(tightWarning.severity, 'error', 'severity should be error');
     });
 
-    test('[Case C] Tight interval — effectiveAlert equals LFA for FDP', () => {
-      // LFA 0800, T/O 1000 → alert = 0545 (tight), effectiveAlert = 0800
-      // FDP start = effectiveAlert+1hr = 0900, FDP end = 0900+16 = 0100 next day
+    test('[Case C] Tight interval — alert pinned to LFA, FDP determined', () => {
+      // LFA 0800, T/O 1000 → latest alert = 0545 < LFA, so the crew is alerted at LFA.
+      // FDP start = LFA+1hr = 0900, FDP end = 0900+16 = 0100 next day
       const result = calculate({
         ...BASE, alertType: 'LFA', season: 'Summer', formationType: 'Single Ship',
         crewType: 'Basic Crew', lfaTime: '0800', takeoffTime: '1000'
       });
       const fdpEnd = findEvent(result.results, 'FDP End');
-      assertClose(fdpEnd, '0100', 'FDP End uses effectiveAlert (LFA), not raw alert');
+      assertClose(fdpEnd, '0100', 'FDP End from LFA+1hr when tight');
     });
 
-    test('[Case C] Tight interval — crew rest uses effectiveAlert', () => {
-      // LFA 0800, effectiveAlert = 0800 → FDP start = 0900, crew rest = 0900-12 = 2100 prev day
+    test('[Case C] Tight interval — crew rest from LFA', () => {
+      // LFA 0800 → crew rest = LFA + 1hr − 12hr = 2100 prev day
       const result = calculate({
         ...BASE, alertType: 'LFA', season: 'Summer', formationType: 'Single Ship',
         crewType: 'Basic Crew', lfaTime: '0800', takeoffTime: '1000'
       });
       const crewRest = findEvent(result.results, 'Crew Rest');
-      assertClose(crewRest, '2100', 'Crew rest uses effectiveAlert');
+      assertClose(crewRest, '2100', 'Crew rest from LFA');
     });
 
     test('[Case C] Tight interval — outOfOrder rows marked', () => {
@@ -485,10 +473,10 @@
       assertNotNull(result, 'result');
       const lfa = findEvent(result.results, 'LFA');
       assertEqual(lfa.toUTC().hour, 10, 'LFA Zulu hour');
-      // T/O = LFA + 4:15 = 1415Z
-      const to = findEvent(result.results, 'T/O');
-      assertEqual(to.toUTC().hour, 14, 'T/O Zulu hour');
-      assertEqual(to.toUTC().minute, 15, 'T/O Zulu minute');
+      // Crew Rest = LFA + 1hr − 12hr = 2300Z previous day
+      const cr = findEvent(result.results, 'Crew Rest');
+      assertEqual(cr.toUTC().hour, 23, 'Crew Rest Zulu hour');
+      assertNull(findEvent(result.results, 'T/O'), 'T/O not derived from LFA alone');
     });
 
     test('[Zulu] UTC timezone with Zulu input', () => {
@@ -506,20 +494,21 @@
     // 6. FDP calculations per AFMAN
     // ============================================================
 
-    test('[FDP] LFA: FDP starts at LFA+1hr, Basic=16hr', () => {
+    test('[FDP] LFA: FDP starts at Alert+1hr, Basic=16hr (T/O only, Alert = LFA)', () => {
       const result = calculate({
         ...BASE, alertType: 'LFA', season: 'Summer', formationType: 'Single Ship',
-        crewType: 'Basic Crew', lfaTime: '0400', takeoffTime: ''
+        crewType: 'Basic Crew', lfaTime: '', takeoffTime: '0815'
       });
       const fdpEnd = findEvent(result.results, 'FDP End');
-      // FDP start = 0400 + 1hr = 0500, FDP end = 0500 + 16hr = 2100
+      // LFA = Alert = 0815 − 4:15 = 0400. FDP start = 0500, FDP end = 0500 + 16hr = 2100
+      assertClose(findEvent(result.results, 'LFA'), '0400', 'Derived LFA');
       assertClose(fdpEnd, '2100', 'FDP End (LFA Basic)');
     });
 
-    test('[FDP] LFA: Augmented=24hr', () => {
+    test('[FDP] LFA: Augmented=24hr (T/O only, Alert = LFA)', () => {
       const result = calculate({
         ...BASE, alertType: 'LFA', season: 'Summer', formationType: 'Single Ship',
-        crewType: 'Augmented Crew', lfaTime: '0400', takeoffTime: ''
+        crewType: 'Augmented Crew', lfaTime: '', takeoffTime: '0815'
       });
       const fdpEnd = findEvent(result.results, 'FDP End');
       // FDP start = 0400 + 1hr = 0500, FDP end = 0500 + 24hr = 0500 next day
@@ -559,6 +548,27 @@
       const fdpEnd = findEvent(result.results, 'FDP End');
       // Show = 0645, FDP end = 0645 + 24hr = 0645 next day
       assertClose(fdpEnd, '0645', 'FDP End (Self Alert Augmented)');
+    });
+
+    test('[FDP] LFA with no FDP End when LFA alone is given', () => {
+      const result = calculate({
+        ...BASE, alertType: 'LFA', season: 'Summer', formationType: 'Single Ship',
+        crewType: 'Basic Crew', lfaTime: '0400', takeoffTime: ''
+      });
+      assertNull(findEvent(result.results, 'FDP End'), 'Alert unknown → FDP End not output');
+    });
+
+    test('[FDP] LFA+TO with slack: FDP End not output (alert undetermined)', () => {
+      // LFA 0400, T/O 1000 → latest alert 0545, 1h45 of slack. C2 could alert anywhere
+      // from 0400 to 0545, so FDP start is anywhere from 0500 to 0645. Not derivable.
+      const result = calculate({
+        ...BASE, alertType: 'LFA', season: 'Summer', formationType: 'Single Ship',
+        crewType: 'Basic Crew', lfaTime: '0400', takeoffTime: '1000'
+      });
+      assertNoWarnings(result.warnings, 'Slack is not a warning');
+      assertClose(findEvent(result.results, 'Alert'), '0545', 'Alert row = latest legal alert');
+      assertNull(findEvent(result.results, 'FDP End'), 'FDP End omitted with slack');
+      assertClose(findEvent(result.results, 'Crew Rest'), '1700', 'Crew Rest from LFA, not from latest alert');
     });
 
     test('[FDP] LFA with both LFA+TO: FDP starts from LFA, not show', () => {
@@ -781,13 +791,13 @@
       assertClose(findEvent(result.results, 'FDP End'), '2200', 'FDP End');
     });
 
-    test('[Scenario] Winter formation augmented: LFA 0400', () => {
+    test('[Scenario] Winter formation augmented: LFA 0400, TO 0845', () => {
       const result = calculate({
         ...BASE, alertType: 'LFA', season: 'Winter', formationType: 'Formation',
-        crewType: 'Augmented Crew', lfaTime: '0400', takeoffTime: '', landTime: ''
+        crewType: 'Augmented Crew', lfaTime: '0400', takeoffTime: '0845', landTime: ''
       });
+      assertNoWarnings(result.warnings, 'LFA matches T/O − 4:45 exactly');
       assertClose(findEvent(result.results, 'LFA'), '0400', 'LFA');
-      // TO = 0400 + 4:45 = 0845
       assertClose(findEvent(result.results, 'T/O'), '0845', 'T/O');
       // Show = 0845 - 4:15 = 0430 (Formation show 4+15 in Winter)
       assertClose(findEvent(result.results, 'Show'), '0430', 'Show');
@@ -865,23 +875,23 @@
     // 13. Alert event (v1.5.1)
     // ============================================================
 
-    test('[Alert Event] Alert appears in LFA mode with LFA-only input', () => {
+    test('[Alert Event] Alert absent with LFA-only input (Case A — alert unknown)', () => {
       const result = calculate({
         ...BASE, alertType: 'LFA', season: 'Summer', formationType: 'Single Ship',
         crewType: 'Basic Crew', lfaTime: '0500', takeoffTime: ''
       });
-      const alert = findEvent(result.results, 'Alert');
-      assertNotNull(alert, 'Alert event should exist');
+      assertNull(findEvent(result.results, 'Alert'), 'Alert not derivable from LFA alone');
     });
 
-    test('[Alert Event] Alert equals LFA when only LFA provided (Case A)', () => {
+    test('[Alert Event] Alert equals LFA when only T/O provided (Case B)', () => {
       const result = calculate({
         ...BASE, alertType: 'LFA', season: 'Summer', formationType: 'Single Ship',
-        crewType: 'Basic Crew', lfaTime: '0500', takeoffTime: ''
+        crewType: 'Basic Crew', lfaTime: '', takeoffTime: '0915'
       });
       const alert = findEvent(result.results, 'Alert');
       const lfa = findEvent(result.results, 'LFA');
-      assertClose(alert, fmt(lfa), 'Alert should equal LFA in Case A');
+      assertClose(alert, fmt(lfa), 'Alert should equal LFA in Case B');
+      assertClose(alert, '0500', 'Alert = T/O − 4:15');
     });
 
     test('[Alert Event] Alert equals derived value when both LFA+T/O match (Case C)', () => {
@@ -1464,17 +1474,17 @@
       assertTrue(lfa < to, 'LFA before T/O');
     });
 
-    test('[LFA Day-Prior] FDP computed correctly for overnight LFA', () => {
-      // LFA 2200 (prev day), T/O 0500. FDP start = LFA+1hr = 2300; FDP end = 2300+16hr = 1500.
+    test('[LFA Day-Prior] FDP End not output for overnight LFA with slack', () => {
+      // LFA 2200 (prev day), T/O 0500 → latest alert 0045, 2h45 of slack. Alert undetermined.
       const result = calculate({
         ...BASE, alertType: 'LFA', season: 'Summer', formationType: 'Single Ship',
         crewType: 'Basic Crew', lfaTime: '2200', takeoffTime: '0500', landTime: ''
       });
-      assertClose(findEvent(result.results, 'FDP End'), '1500', 'FDP End = LFA+1hr+16hr');
+      assertNull(findEvent(result.results, 'FDP End'), 'FDP End omitted — alert could be 2200 to 0045');
     });
 
     test('[LFA Day-Prior] Crew rest computed correctly for overnight LFA', () => {
-      // LFA 2200 (prev day). FDP start = 2300 (prev day). Crew rest = 2300-12hr = 1100 (two days prior).
+      // LFA 2200 (prev day). Crew rest = LFA + 1hr − 12hr = 1100 (prev day).
       const result = calculate({
         ...BASE, alertType: 'LFA', season: 'Summer', formationType: 'Single Ship',
         crewType: 'Basic Crew', lfaTime: '2200', takeoffTime: '0500', landTime: ''
@@ -1595,7 +1605,7 @@
     });
 
     test('[Day Offset] Crew rest for overnight LFA is day -1 or earlier', () => {
-      // LFA 2200 prev day; crew rest = alert+1h-12h lands early on prev day
+      // LFA 2200 prev day; crew rest = LFA+1h-12h = 1100 prev day
       const result = calculate({
         ...BASE, alertType: 'LFA', season: 'Summer', formationType: 'Single Ship',
         crewType: 'Basic Crew', lfaTime: '2200', takeoffTime: '0500', landTime: ''
@@ -1658,33 +1668,41 @@
     });
 
     // ============================================================
-    // 20. Crew Rest Cap Tests
+    // 20. Crew Rest from LFA — independent of T/O slack
     // ============================================================
 
-    test('[Crew Rest Cap] LFA=2200 T/O=1500 Summer — crew rest capped at LFA', () => {
-      // Uncapped crewRest = alert(2200) + 1h - 12h = 2300 prev day > LFA 2200 prev day → cap fires
-      const result = calculate({
-        ...BASE, alertType: 'LFA', season: 'Summer', formationType: 'Single Ship',
-        crewType: 'Basic Crew', lfaTime: '2200', takeoffTime: '1500', landTime: ''
-      });
-      const cr  = findEvent(result.results, 'Crew Rest');
-      const lfa = findEvent(result.results, 'LFA');
-      assertClose(cr, '2200', 'Crew Rest capped at LFA time');
-      assertTrue(cr <= lfa, 'Crew Rest at or before LFA');
+    test('[Crew Rest LFA] Crew Rest = LFA + 1h − 12h regardless of T/O', () => {
+      // The LFA the crew was given already fixes their rest. T/O (and therefore
+      // the latest legal alert) must not move it.
+      for (const takeoffTime of ['0500', '1000', '1500']) {
+        const result = calculate({
+          ...BASE, alertType: 'LFA', season: 'Summer', formationType: 'Single Ship',
+          crewType: 'Basic Crew', lfaTime: '2200', takeoffTime, landTime: ''
+        });
+        assertClose(findEvent(result.results, 'Crew Rest'), '1100', `Crew Rest 1100 for T/O=${takeoffTime}`);
+      }
     });
 
-    test('[Crew Rest Cap] LFA=2200 T/O=0500 Summer — crew rest not capped (crewRest < LFA)', () => {
-      // alert = T/O - 4h15 = 0045; crewRest = 0045 + 1h - 12h = 1345 prev day < LFA 2200 prev day → no cap
-      const result = calculate({
-        ...BASE, alertType: 'LFA', season: 'Summer', formationType: 'Single Ship',
-        crewType: 'Basic Crew', lfaTime: '2200', takeoffTime: '0500', landTime: ''
-      });
-      const cr  = findEvent(result.results, 'Crew Rest');
-      const lfa = findEvent(result.results, 'LFA');
-      assertTrue(cr < lfa, 'Crew Rest before LFA (no cap needed)');
+    test('[Crew Rest LFA] Crew Rest is 11h before LFA in every LFA-mode case', () => {
+      const cases = [
+        { lfaTime: '2200', takeoffTime: '' },      // Case A
+        { lfaTime: '',     takeoffTime: '0215' },  // Case B: LFA derived = 2200
+        { lfaTime: '2200', takeoffTime: '0215' },  // Case C exact
+        { lfaTime: '2200', takeoffTime: '0500' },  // Case C slack
+        { lfaTime: '2200', takeoffTime: '0100' }   // Case C tight
+      ];
+      for (const c of cases) {
+        const result = calculate({
+          ...BASE, alertType: 'LFA', season: 'Summer', formationType: 'Single Ship',
+          crewType: 'Basic Crew', landTime: '', ...c
+        });
+        const cr  = findEvent(result.results, 'Crew Rest');
+        const lfa = findEvent(result.results, 'LFA');
+        assertEqual(lfa.diff(cr, 'hours').hours, 11, `LFA − Crew Rest = 11h (LFA=${c.lfaTime||'derived'}, T/O=${c.takeoffTime||'none'})`);
+      }
     });
 
-    test('[Crew Rest Cap] Crew Rest always before LFA in sorted results', () => {
+    test('[Crew Rest LFA] Crew Rest always before LFA in sorted results', () => {
       for (const takeoffTime of ['0500', '1000', '1500']) {
         const result = calculate({
           ...BASE, alertType: 'LFA', season: 'Summer', formationType: 'Single Ship',
