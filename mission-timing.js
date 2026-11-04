@@ -1,7 +1,7 @@
 // Pure mission timing calculation engine.
 // No DOM, no React, no globals — safe to import in both app and test suite.
 
-export const APP_VERSION = '1.5.12';
+export const APP_VERSION = '1.5.13';
 
 export const REGS = {
   crewRestHours: 12,          // AFMAN 11-202V3 para 3.1
@@ -9,9 +9,11 @@ export const REGS = {
   fdpBasicHours: 16,          // AFMAN 11-202V3_AMCSUP Table 3.1
   fdpAugmentedHours: 24,      // AFMAN 11-202V3_AMCSUP Table 3.1
   checkInBeforeStartMin: 5,
+  alertToShowHours: 1,        // Alert → Show is never less than 1 hour; LFA = Show + 1h
   intervals: {
     Summer: {
-      lfaToTO:        { hours: 4, minutes: 15 },
+      lfaSingleToTO:  { hours: 4, minutes: 15 },
+      lfaFormToTO:    { hours: 4, minutes: 45 },
       showSingleToTO: { hours: 3, minutes: 15 },
       showFormToTO:   { hours: 3, minutes: 45 },
       stepSingleToTO: { hours: 1, minutes: 45 },
@@ -19,7 +21,8 @@ export const REGS = {
       startToTO:      { hours: 0, minutes: 25 }
     },
     Winter: {
-      lfaToTO:        { hours: 4, minutes: 45 },
+      lfaSingleToTO:  { hours: 4, minutes: 45 },
+      lfaFormToTO:    { hours: 5, minutes: 15 },
       showSingleToTO: { hours: 3, minutes: 45 },
       showFormToTO:   { hours: 4, minutes: 15 },
       stepSingleToTO: { hours: 2, minutes:  0 },
@@ -38,10 +41,11 @@ export const formatDuration = (totalMin) => {
 
 export function getIntervals(season, formationType) {
   const s = REGS.intervals[season];
+  const single = formationType === 'Single Ship';
   return {
-    lfaToTO:  s.lfaToTO,
-    showToTO: formationType === 'Single Ship' ? s.showSingleToTO : s.showFormToTO,
-    stepToTO: formationType === 'Single Ship' ? s.stepSingleToTO : s.stepFormToTO,
+    lfaToTO:   single ? s.lfaSingleToTO  : s.lfaFormToTO,
+    showToTO:  single ? s.showSingleToTO : s.showFormToTO,
+    stepToTO:  single ? s.stepSingleToTO : s.stepFormToTO,
     startToTO: s.startToTO
   };
 }

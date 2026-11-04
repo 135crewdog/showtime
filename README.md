@@ -4,7 +4,7 @@ KC-135 mission timing calculator for aircrew. Given a takeoff time or LFA, Show 
 
 Installable as a PWA on iOS and Android. Works offline after first load.
 
-**Current version: v1.5.12**
+**Current version: v1.5.13**
 
 ---
 
@@ -29,12 +29,15 @@ Installable as a PWA on iOS and Android. Works offline after first load.
 
 | Interval | Summer | Winter |
 |---|---|---|
-| LFA → T/O | 4+15 | 4+45 |
+| LFA → T/O (Single Ship) | 4+15 | 4+45 |
+| LFA → T/O (Formation) | 4+45 | 5+15 |
 | Show → T/O (Single Ship) | 3+15 | 3+45 |
 | Show → T/O (Formation) | 3+45 | 4+15 |
 | Step → T/O (Single Ship) | 1+45 | 2+00 |
 | Step → T/O (Formation) | 2+00 | 2+00 |
 | Start → T/O | 0+25 | 0+30 |
+
+Alert to Show is always 1 hour, so LFA → T/O is Show → T/O + 1 hour for every combination.
 
 Crew rest is 12 hours before FDP start. In LFA mode it is fixed by the LFA (LFA + 1 hr − 12 hr); in self-alert mode FDP starts at show.
 
