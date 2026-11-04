@@ -674,7 +674,7 @@
                       return b;
                     };
                     const rows = [
-                      ['Crew Rest', toMin(ss.showToTO) + REGS.crewRestHours * 60, toMin(fm.showToTO) + REGS.crewRestHours * 60],
+                      ['Crew Rest *', toMin(ss.showToTO) + REGS.crewRestHours * 60, toMin(fm.showToTO) + REGS.crewRestHours * 60],
                       ['LFA / Alert', toMin(ss.lfaToTO), toMin(fm.lfaToTO)],
                       ['Show', toMin(ss.showToTO), toMin(fm.showToTO)],
                       ['Brief', brief(ss), brief(fm)],
@@ -682,8 +682,8 @@
                       ['Check In', null, toMin(fm.startToTO) + REGS.checkInBeforeStartMin],
                       ['Start', toMin(ss.startToTO), toMin(fm.startToTO)],
                       ['T/O', 0, 0],
-                      ['FDP End (Basic)', -(REGS.fdpBasicHours * 60 - toMin(ss.showToTO)), -(REGS.fdpBasicHours * 60 - toMin(fm.showToTO))],
-                      ['FDP End (Aug)', -(REGS.fdpAugmentedHours * 60 - toMin(ss.showToTO)), -(REGS.fdpAugmentedHours * 60 - toMin(fm.showToTO))]
+                      ['FDP End (Basic) *', -(REGS.fdpBasicHours * 60 - toMin(ss.showToTO)), -(REGS.fdpBasicHours * 60 - toMin(fm.showToTO))],
+                      ['FDP End (Aug) *', -(REGS.fdpAugmentedHours * 60 - toMin(ss.showToTO)), -(REGS.fdpAugmentedHours * 60 - toMin(fm.showToTO))]
                     ];
                     const cell = v => v === null ? '—' : (v < 0 ? '+' + formatDuration(-v) : formatDuration(v));
                     const th = { textAlign: 'right', paddingBottom: '8px', color: colors.textSecondary, fontWeight: '400', fontSize: '12px', textTransform: 'uppercase', letterSpacing: '0.5px' };
@@ -713,7 +713,8 @@
                     `;
                   })}
                   <p style=${{margin: '4px 16px 0', fontSize: '12px', lineHeight: '1.6', color: colors.textSecondary}}>
-                    Brief reflects your current Crew Brief setting (${briefMinutes} min ${briefReference}). FDP End is shown as time <em>after</em> T/O, from a FDP start at Show (Alert + 1 hr). Crew Rest is 12 hr before FDP start.
+                    Brief reflects your current Crew Brief setting (${briefMinutes} min ${briefReference}). FDP End is shown as time <em>after</em> T/O.<br/><br/>
+                    * Crew Rest and FDP End rows assume the alert is at T/O minus the LFA interval, i.e. FDP starts at Show. That holds for Self Alert, T/O-only, and LFA + T/O with no slack. When you enter an LFA earlier than that, Crew Rest is LFA + 1 hr − 12 hr regardless of T/O, and FDP End is not determined — use the Output tab, which applies the right rule.
                   </p>
                 </div>
               </div>
