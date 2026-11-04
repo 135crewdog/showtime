@@ -32,7 +32,7 @@
   <div id="results"></div>
 
   <script type="module">
-    import { calculateMissionTimes, parseTime, resolveTime, getIntervals, formatDuration } from './mission-timing.js';
+    import { calculateMissionTimes, parseTime, resolveTime, getIntervals, formatDuration, REGS } from './mission-timing.js';
 
     const { DateTime } = luxon;
 
@@ -717,10 +717,9 @@
 
     test('[Intervals] Summer Formation', () => {
       const i = getIntervals('Summer', 'Formation');
+      assertEqual(i.lfaToTO.hours, 4, 'LFA-TO hrs'); assertEqual(i.lfaToTO.minutes, 45, 'LFA-TO min (Formation 4+45)');
       assertEqual(i.showToTO.hours, 3, 'Show-TO hrs'); assertEqual(i.showToTO.minutes, 45, 'Show-TO min (Formation 3+45)');
       assertEqual(i.stepToTO.hours, 2, 'Step-TO hrs'); assertEqual(i.stepToTO.minutes, 0, 'Step-TO min');
-      // Other intervals same as Single Ship
-      assertEqual(i.lfaToTO.hours, 4, 'LFA-TO hrs'); assertEqual(i.lfaToTO.minutes, 15, 'LFA-TO min');
       assertEqual(i.startToTO.minutes, 25, 'Start-TO min (same as single ship)');
     });
 
@@ -734,9 +733,37 @@
 
     test('[Intervals] Winter Formation', () => {
       const i = getIntervals('Winter', 'Formation');
+      assertEqual(i.lfaToTO.hours, 5, 'LFA-TO hrs'); assertEqual(i.lfaToTO.minutes, 15, 'LFA-TO min (Formation 5+15)');
       assertEqual(i.showToTO.hours, 4, 'Show-TO hrs'); assertEqual(i.showToTO.minutes, 15, 'Show-TO min (Formation 4+15)');
       assertEqual(i.stepToTO.hours, 2, 'Step-TO hrs'); assertEqual(i.stepToTO.minutes, 0, 'Step-TO min');
       assertEqual(i.startToTO.minutes, 30, 'Start-TO min (same as single ship)');
+    });
+
+    test('[Intervals] Alert → Show is exactly 1 hour for every season/formation', () => {
+      const toMin = d => d.hours * 60 + d.minutes;
+      for (const se of ['Summer', 'Winter']) {
+        for (const fo of ['Single Ship', 'Formation']) {
+          const i = getIntervals(se, fo);
+          assertEqual(toMin(i.lfaToTO) - toMin(i.showToTO), REGS.alertToShowHours * 60, `${se} ${fo}: LFA−Show = 1h`);
+          assertTrue(toMin(i.showToTO) > toMin(i.stepToTO), `${se} ${fo}: Show before Step`);
+          assertTrue(toMin(i.stepToTO) > toMin(i.startToTO), `${se} ${fo}: Step before Start`);
+        }
+      }
+    });
+
+    test('[Intervals] LFA mode FDP start never falls after Show', () => {
+      // FDP starts NLT alert+1h. Since Show = Alert+1h, FDP start == Show in every combo.
+      for (const se of ['Summer', 'Winter']) {
+        for (const fo of ['Single Ship', 'Formation']) {
+          const result = calculate({
+            ...BASE, alertType: 'LFA', season: se, formationType: fo,
+            crewType: 'Basic Crew', takeoffTime: '1200', lfaTime: '', landTime: ''
+          });
+          const alert = findEvent(result.results, 'Alert');
+          const show  = findEvent(result.results, 'Show');
+          assertEqual(alert.plus({ hours: 1 }).toMillis(), show.toMillis(), `${se} ${fo}: Alert+1h == Show`);
+        }
+      }
     });
 
     // ============================================================
@@ -791,22 +818,22 @@
       assertClose(findEvent(result.results, 'FDP End'), '2200', 'FDP End');
     });
 
-    test('[Scenario] Winter formation augmented: LFA 0400, TO 0845', () => {
+    test('[Scenario] Winter formation augmented: LFA 0400, TO 0915', () => {
       const result = calculate({
         ...BASE, alertType: 'LFA', season: 'Winter', formationType: 'Formation',
-        crewType: 'Augmented Crew', lfaTime: '0400', takeoffTime: '0845', landTime: ''
+        crewType: 'Augmented Crew', lfaTime: '0400', takeoffTime: '0915', landTime: ''
       });
-      assertNoWarnings(result.warnings, 'LFA matches T/O − 4:45 exactly');
+      assertNoWarnings(result.warnings, 'LFA matches T/O − 5:15 exactly (Formation Winter)');
       assertClose(findEvent(result.results, 'LFA'), '0400', 'LFA');
-      assertClose(findEvent(result.results, 'T/O'), '0845', 'T/O');
-      // Show = 0845 - 4:15 = 0430 (Formation show 4+15 in Winter)
-      assertClose(findEvent(result.results, 'Show'), '0430', 'Show');
-      // Step = 0845 - 2:00 = 0645 (Formation always 2+00)
-      assertClose(findEvent(result.results, 'Step'), '0645', 'Step');
-      // Start = 0845 - 0:30 = 0815 (Winter)
-      assertClose(findEvent(result.results, 'Start'), '0815', 'Start');
-      // Check In = 0815 - 0:05 = 0810
-      assertClose(findEvent(result.results, 'Check In'), '0810', 'Check In');
+      assertClose(findEvent(result.results, 'T/O'), '0915', 'T/O');
+      // Show = 0915 - 4:15 = 0500 = LFA + 1h
+      assertClose(findEvent(result.results, 'Show'), '0500', 'Show');
+      // Step = 0915 - 2:00 = 0715 (Formation always 2+00)
+      assertClose(findEvent(result.results, 'Step'), '0715', 'Step');
+      // Start = 0915 - 0:30 = 0845 (Winter)
+      assertClose(findEvent(result.results, 'Start'), '0845', 'Start');
+      // Check In = 0845 - 0:05 = 0840
+      assertClose(findEvent(result.results, 'Check In'), '0840', 'Check In');
       // FDP: 0400+1 = 0500, + 24hr = 0500 next day
       assertClose(findEvent(result.results, 'FDP End'), '0500', 'FDP End');
       // Crew Rest: 0500 - 12hr = 1700 prev day
