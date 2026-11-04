@@ -4,7 +4,7 @@ KC-135 mission timing calculator for aircrew. Given a takeoff time or LFA, Show 
 
 Installable as a PWA on iOS and Android. Works offline after first load.
 
-**Current version: v1.5.10**
+**Current version: v1.5.11**
 
 ---
 
@@ -12,7 +12,7 @@ Installable as a PWA on iOS and Android. Works offline after first load.
 
 - **LFA and Self Alert modes** — LFA mode derives takeoff from alert time (or vice versa) and warns when the two don't match the expected interval
 - **Summer/Winter profiles** — automatically adjusts all intervals per AFMAN 11-2KC-135V3
-- **Single Ship and Formation** — formation adds a Check In event 5 min before Start
+- **Single Ship and Formation** — formation shows 30 min earlier (3+45 summer / 4+15 winter per AFMAN 11-2KC-135V3_MILDENHALLSUP) and adds a Check In event 5 min before Start
 - **Basic and Augmented crew** — drives the FDP limit (16 or 24 hours)
 - **Configurable crew brief** — set offset in 5-min increments (15–90 min) relative to Show or Step
 - **Local/Zulu input** — enter times in either timezone; all output shows both
@@ -30,7 +30,8 @@ Installable as a PWA on iOS and Android. Works offline after first load.
 | Interval | Summer | Winter |
 |---|---|---|
 | LFA → T/O | 4+15 | 4+45 |
-| Show → T/O | 3+15 | 3+45 |
+| Show → T/O (Single Ship) | 3+15 | 3+45 |
+| Show → T/O (Formation) | 3+45 | 4+15 |
 | Step → T/O (Single Ship) | 1+45 | 2+00 |
 | Step → T/O (Formation) | 2+00 | 2+00 |
 | Start → T/O | 0+25 | 0+30 |
@@ -47,6 +48,7 @@ Crew rest is 12 hours before FDP start. FDP start is LFA+1hr for alert missions,
 | FDP Start | AFMAN 11-202V3_AMCSUP para 3.2.1 |
 | FDP Limits (16/24 hr) | AFMAN 11-202V3_AMCSUP Table 3.1 |
 | KC-135 Alert Times | AFMAN 11-2KC-135V3 para 3.7 |
+| Formation Show Times | AFMAN 11-2KC-135V3_MILDENHALLSUP (28 Sep 2023) |
 
 ---
 
